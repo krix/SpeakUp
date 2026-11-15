@@ -1,0 +1,45 @@
+{
+  "version": "2026.11.1",
+  "themes": [
+    {
+      "id": "tiere",
+      "name": "Tiere",
+      "emoji": "🐾",
+      "order": 1,
+      "unlockPoints": 0,
+      "file": "tiere.csv"
+    },
+    {
+      "id": "schule",
+      "name": "Schule",
+      "emoji": "🎒",
+      "order": 2,
+      "unlockPoints": 0,
+      "file": "schule.csv"
+    },
+    {
+      "id": "essen",
+      "name": "Essen & Trinken",
+      "emoji": "🍎",
+      "order": 3,
+      "unlockPoints": 60,
+      "file": "essen.csv"
+    },
+    {
+      "id": "hobbys",
+      "name": "Hobbys & Freizeit",
+      "emoji": "⚽",
+      "order": 4,
+      "unlockPoints": 120,
+      "file": "hobbys.csv"
+    },
+    {
+      "id": "reisen",
+      "name": "Reisen",
+      "emoji": "✈️",
+      "order": 5,
+      "unlockPoints": 200,
+      "file": "reisen.csv"
+    }
+  ]
+}

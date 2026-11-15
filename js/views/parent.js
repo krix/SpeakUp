@@ -1,0 +1,1773 @@
+/**
+ * Elternbereich – durch eine Rechenaufgabe geschützt.
+ *
+ * Tabs:
+ *   Wörter      – Wörter ansehen, anlegen, bearbeiten, sortieren, löschen
+ *   Themen      – Themen anlegen, bearbeiten, sortieren, löschen, CSV exportieren
+ *   Import      – CSV aus Datei, Einfügen oder URL mit Vorschau importieren
+ *   Sichern     – JSON-Backup, CSV-Export, Wiederherstellen, Zurücksetzen
+ *   Fortschritt – Statistik pro Wort, Verlauf, Fortschritt zurücksetzen
+ *   Einstellungen – Ton, Vorlesen, Handschrift, Einwilligung, Installation
+ *
+ * Die Rechenaufgabe ist kein Sicherheitsmerkmal, sondern eine Hürde für
+ * jüngere Kinder. Alle Daten bleiben lokal.
+ */
+import * as library from "../core/library.js";
+import * as learner from "../core/learner.js";
+import * as transfer from "../core/transfer.js";
+import db from "../core/db.js";
+import bus from "../core/bus.js";
+import { APP_VERSION, PARENT_SESSION_KEY } from "../core/config.js";
+import {
+  icon,
+  esc,
+  openModal,
+  confirmDialog,
+  showToast,
+  formatDate,
+  formatDuration,
+  plural,
+  readTextFile,
+} from "../ui/dom.js";
+import { sfx, setSfxEnabled } from "../ui/sfx.js";
+import { speak, unlockTts } from "../core/tts.js";
+import { mascot } from "../ui/mascot.js";
+import { showConsentModal } from "./onboarding.js";
+import { canInstall, promptInstall, installHint, isStandalone } from "../core/install.js";
+
+const TABS = [
+  { id: "words", label: "Wörter", iconName: "pencil" },
+  { id: "themes", label: "Themen", iconName: "menu" },
+  { id: "import", label: "Import", iconName: "upload" },
+  { id: "backup", label: "Sichern", iconName: "download" },
+  { id: "stats", label: "Fortschritt", iconName: "chart" },
+  { id: "settings", label: "Einstellungen", iconName: "lock" },
+];
+
+const IMPORT_MODES = [
+  { id: "add", title: "Hinzufügen", desc: "Nur neue Wörter übernehmen. Vorhandene bleiben unverändert." },
+  { id: "merge", title: "Zusammenführen", desc: "Gleiche deutsche Wörter aktualisieren, neue ergänzen." },
+  { id: "replace", title: "Ersetzen", desc: "Das Thema wird vollständig durch die Datei ersetzt." },
+];
+
+const MODE_LABELS = { speak: "Sprechen", listen: "Hören & Schreiben", write: "Schreiben", mix: "Mix" };
+
+function randomInt(min, max) {
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
+
+function makeGateTask() {
+  // Zweistellige Multiplikation – für Grundschulkinder ohne Taschenrechner
+  // eine echte Hürde, für Erwachsene in wenigen Sekunden gelöst.
+  const a = randomInt(12, 19);
+  const b = randomInt(3, 9);
+  return { a, b, answer: a * b };
+}
+
+function freshImportState(target) {
+  return {
+    source: "file",
+    text: "",
+    fileName: "",
+    analysis: null,
+    target: target || "",
+    mode: "merge",
+    newName: "",
+    newEmoji: "📘",
+    busy: false,
+    error: "",
+  };
+}
+
+function storeUnlock(value) {
+  try {
+    if (value) sessionStorage.setItem(PARENT_SESSION_KEY, "1");
+    else sessionStorage.removeItem(PARENT_SESSION_KEY);
+  } catch {
+    /* privater Modus – dann gilt die Sperre nur für diese Ansicht */
+  }
+}
+
+function readUnlock() {
+  try {
+    return sessionStorage.getItem(PARENT_SESSION_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** Einheitliches Feld für Formulare im Modal. */
+function field({ id, label, value = "", type = "text", hint = "", placeholder = "", required = false, autofocus = false }) {
+  return `
+    <div class="field">
+      <label for="${id}">${esc(label)}${required ? " *" : ""}</label>
+      <input class="input" id="${id}" name="${id}" type="${type}" value="${esc(value)}"
+             placeholder="${esc(placeholder)}" ${required ? "required" : ""} ${autofocus ? "autofocus" : ""}
+             ${type === "number" ? 'min="0" step="1"' : ""}>
+      ${hint ? `<span class="hint">${esc(hint)}</span>` : ""}
+    </div>`;
+}
+
+function textareaField({ id, label, value = "", hint = "", rows = 3 }) {
+  return `
+    <div class="field">
+      <label for="${id}">${esc(label)}</label>
+      <textarea class="textarea" id="${id}" name="${id}" rows="${rows}" style="min-height:${rows * 28 + 24}px">${esc(value)}</textarea>
+      ${hint ? `<span class="hint">${esc(hint)}</span>` : ""}
+    </div>`;
+}
+
+function modalError(dialog, message) {
+  if (!dialog) return;
+  let node = dialog.querySelector(".form-error");
+  if (!node) {
+    node = document.createElement("p");
+    node.className = "form-error";
+    const body = dialog.querySelector(".modal-body");
+    if (body) body.prepend(node);
+    else dialog.prepend(node);
+  }
+  node.textContent = message;
+}
+
+function clearModalError(dialog) {
+  dialog?.querySelector(".form-error")?.remove();
+}
+
+/* ============================================================ */
+
+export function renderParent(main) {
+  let alive = true;
+  const themes = library.getThemes();
+  const state = {
+    gate: makeGateTask(),
+    gateError: "",
+    unlocked: readUnlock(),
+    tab: "words",
+    themeId: themes[0]?.id || null,
+    search: "",
+    statsSearch: "",
+    statsSort: "wrong",
+    import: freshImportState(themes[0]?.id),
+    backupThemeId: themes[0]?.id || null,
+  };
+
+  /* ---------- Grundgerüst ---------- */
+
+  function render() {
+    if (!alive) return;
+    if (!state.unlocked) return renderGate();
+
+    if (!state.themeId || !library.getTheme(state.themeId)) {
+      state.themeId = library.getThemes()[0]?.id || null;
+    }
+
+    main.innerHTML = `
+      <div class="stack">
+        <div class="row-between">
+          <div>
+            <h1 class="mb-0">Elternbereich</h1>
+            <p class="muted small mb-0">Wörter, Themen und Fortschritt verwalten</p>
+          </div>
+          <button type="button" class="btn btn-ghost btn-small" data-action="lock">
+            ${icon("lock")} Sperren
+          </button>
+        </div>
+
+        <div class="parent-tabs" role="tablist" aria-label="Bereiche im Elternbereich">
+          ${TABS.map(
+            (tab) => `
+            <button type="button" class="parent-tab" role="tab" id="ptab-${tab.id}"
+                    data-parent-tab="${tab.id}" aria-selected="${state.tab === tab.id}"
+                    aria-controls="parent-panel">
+              ${icon(tab.iconName)} ${esc(tab.label)}
+            </button>`
+          ).join("")}
+        </div>
+
+        <div id="parent-panel" role="tabpanel" aria-labelledby="ptab-${state.tab}"></div>
+      </div>`;
+
+    main.querySelector('[data-action="lock"]')?.addEventListener("click", () => {
+      state.unlocked = false;
+      storeUnlock(false);
+      state.gate = makeGateTask();
+      state.gateError = "";
+      render();
+      showToast("Elternbereich gesperrt.", { iconName: "lock" });
+    });
+
+    main.querySelectorAll("[data-parent-tab]").forEach((button) => {
+      button.addEventListener("click", () => {
+        if (button.dataset.parentTab === state.tab) return;
+        sfx.click();
+        state.tab = button.dataset.parentTab;
+        render();
+      });
+    });
+
+    renderPanel();
+  }
+
+  function renderPanel() {
+    if (!alive) return;
+    const panel = main.querySelector("#parent-panel");
+    if (!panel) return;
+    switch (state.tab) {
+      case "words":
+        return renderWords(panel);
+      case "themes":
+        return renderThemes(panel);
+      case "import":
+        return renderImport(panel);
+      case "backup":
+        return renderBackup(panel);
+      case "stats":
+        return renderStats(panel);
+      case "settings":
+        return renderSettings(panel);
+      default:
+        return renderWords(panel);
+    }
+  }
+
+  /* ---------- Elternsperre ---------- */
+
+  function renderGate() {
+    const { a, b } = state.gate;
+    main.innerHTML = `
+      <div class="card panel parent-gate-note">
+        <div class="gate-icon">${icon("lock")}</div>
+        <h1>Elternbereich</h1>
+        <p class="muted">Dieser Bereich ist für Erwachsene. Bitte löse kurz die Aufgabe.</p>
+        <p class="gate-task" id="gate-task" aria-live="polite">${a} × ${b} = ?</p>
+        <form class="gate-form" id="gate-form" autocomplete="off">
+          <input class="input" type="number" inputmode="numeric" id="gate-answer" name="answer"
+                 aria-label="Ergebnis der Aufgabe" placeholder="?" required>
+          <button class="btn" type="submit">${icon("check")} Weiter</button>
+        </form>
+        <p class="gate-error" id="gate-error" role="alert">${esc(state.gateError)}</p>
+        <a class="btn-link" href="#/home">${icon("back")} Zurück zum Lernen</a>
+      </div>`;
+
+    const form = main.querySelector("#gate-form");
+    const input = main.querySelector("#gate-answer");
+    form?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const value = Number.parseInt(input?.value || "", 10);
+      if (Number.isFinite(value) && value === state.gate.answer) {
+        state.unlocked = true;
+        state.gateError = "";
+        storeUnlock(true);
+        render();
+        showToast("Elternbereich entsperrt.", { type: "success", iconName: "check" });
+        return;
+      }
+      state.gate = makeGateTask();
+      state.gateError = "Das war leider falsch. Hier ist eine neue Aufgabe.";
+      render();
+      main.querySelector("#gate-answer")?.focus();
+    });
+    input?.focus();
+  }
+
+  /* ---------- Wörter ---------- */
+
+  function renderWords(panel) {
+    const themeOptions = library
+      .getThemes()
+      .map(
+        (theme) =>
+          `<option value="${esc(theme.id)}" ${theme.id === state.themeId ? "selected" : ""}>${esc(theme.emoji)} ${esc(theme.name)}</option>`
+      )
+      .join("");
+    const theme = state.themeId ? library.getTheme(state.themeId) : null;
+    const words = theme ? library.getWords(theme.id) : [];
+    const progress = learner.getProgressMap();
+    const query = state.search.trim().toLowerCase();
+    const visible = query
+      ? words.filter((word) =>
+          `${word.de} ${word.en} ${(word.alternatives || []).join(" ")}`.toLowerCase().includes(query)
+        )
+      : words;
+
+    panel.innerHTML = `
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Wörter</h2>
+            <p>${theme ? `${esc(theme.name)} · ${plural(words.length, "Wort", "Wörter")}` : "Kein Thema vorhanden"}</p>
+          </div>
+          <button type="button" class="btn btn-small" data-action="add-word" ${theme ? "" : "disabled"}>
+            ${icon("plus")} Neues Wort
+          </button>
+        </div>
+
+        <div class="toolbar">
+          <label class="sr-only" for="word-theme">Thema wählen</label>
+          <select class="select" id="word-theme" style="max-width:260px">${themeOptions}</select>
+          <label class="sr-only" for="word-search">Wörter durchsuchen</label>
+          <input class="input" id="word-search" type="search" placeholder="Suchen …"
+                 value="${esc(state.search)}" style="max-width:220px">
+          <span class="spacer"></span>
+          <button type="button" class="btn btn-ghost btn-small" data-action="sort-az" ${theme ? "" : "disabled"}>A–Z</button>
+          <button type="button" class="btn btn-ghost btn-small" data-action="sort-za" ${theme ? "" : "disabled"}>Z–A</button>
+        </div>
+
+        ${
+          words.length
+            ? `<div class="table-wrap">
+                <table class="data">
+                  <thead>
+                    <tr>
+                      <th scope="col">#</th>
+                      <th scope="col">Deutsch</th>
+                      <th scope="col">Englisch</th>
+                      <th scope="col">Alternativen / Beispiel</th>
+                      <th scope="col">Box</th>
+                      <th scope="col">Aktionen</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${words
+                      .map((word, index) => {
+                        const record = progress.get(word.id);
+                        const matches = !query || visible.includes(word);
+                        return `
+                        <tr data-search="${esc(`${word.de} ${word.en} ${(word.alternatives || []).join(" ")}`.toLowerCase())}" ${matches ? "" : "hidden"}>
+                          <td class="tiny muted">${index + 1}</td>
+                          <td>
+                            <strong>${esc(word.de)}</strong>
+                            ${word.emoji ? `<span aria-hidden="true"> ${esc(word.emoji)}</span>` : ""}
+                          </td>
+                          <td>${esc(word.en)}</td>
+                          <td class="tiny">
+                            ${word.alternatives?.length ? `<div>${word.alternatives.map((alt) => esc(alt)).join(", ")}</div>` : `<span class="muted">–</span>`}
+                            ${word.example ? `<div class="muted">„${esc(word.example)}“</div>` : ""}
+                          </td>
+                          <td><span class="preview-stat" title="Leitner-Box">${record?.seen ? record.box : "neu"}</span></td>
+                          <td class="actions">
+                            <button type="button" class="icon-btn tiny-btn" data-word-action="up" data-id="${esc(word.id)}" aria-label="Nach oben" ${index === 0 ? "disabled" : ""}>${icon("back", "icon-arrow-up")}</button>
+                            <button type="button" class="icon-btn tiny-btn" data-word-action="down" data-id="${esc(word.id)}" aria-label="Nach unten" ${index === words.length - 1 ? "disabled" : ""}>${icon("forward", "icon-arrow-down")}</button>
+                            <button type="button" class="icon-btn tiny-btn" data-word-action="edit" data-id="${esc(word.id)}" aria-label="Wort bearbeiten">${icon("pencil")}</button>
+                            <button type="button" class="icon-btn tiny-btn" data-word-action="delete" data-id="${esc(word.id)}" aria-label="Wort löschen">${icon("trash")}</button>
+                          </td>
+                        </tr>`;
+                      })
+                      .join("")}
+                  </tbody>
+                </table>
+              </div>
+              <p class="scroll-hint">Auf schmalen Bildschirmen lässt sich die Tabelle seitlich scrollen.</p>`
+            : `<div class="table-empty">
+                ${theme ? "In diesem Thema sind noch keine Wörter. Füge das erste hinzu!" : "Lege zuerst ein Thema an."}
+              </div>`
+        }
+
+        <div class="callout mt-2">
+          ${icon("info")}
+          <div>
+            <p class="mb-0"><strong>ID &amp; Fortschritt:</strong> Jedes Wort hat eine feste ID aus Thema, Deutsch und Englisch.
+            Beim Bearbeiten kannst du den Lernfortschritt mitnehmen. Gelöschte Wörter verlieren nur ihren eigenen Fortschritt.</p>
+          </div>
+        </div>
+      </div>`;
+
+    panel.querySelector("#word-theme")?.addEventListener("change", (event) => {
+      state.themeId = event.target.value;
+      state.search = "";
+      renderPanel();
+    });
+
+    panel.querySelector("#word-search")?.addEventListener("input", (event) => {
+      state.search = event.target.value;
+      const search = state.search.trim().toLowerCase();
+      panel.querySelectorAll("tbody tr[data-search]").forEach((row) => {
+        row.hidden = Boolean(search) && !row.dataset.search.includes(search);
+      });
+    });
+
+    panel.querySelector('[data-action="add-word"]')?.addEventListener("click", () => openWordModal(null));
+    panel.querySelector('[data-action="sort-az"]')?.addEventListener("click", () => sortWords("az"));
+    panel.querySelector('[data-action="sort-za"]')?.addEventListener("click", () => sortWords("za"));
+
+    panel.querySelectorAll("[data-word-action]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const word = library.getWord(button.dataset.id);
+        if (!word) return;
+        switch (button.dataset.wordAction) {
+          case "up":
+            library.moveWord(word.id, "up").then(renderPanel);
+            break;
+          case "down":
+            library.moveWord(word.id, "down").then(renderPanel);
+            break;
+          case "edit":
+            openWordModal(word);
+            break;
+          case "delete":
+            deleteWord(word);
+            break;
+        }
+      });
+    });
+  }
+
+  async function sortWords(direction) {
+    if (!state.themeId) return;
+    await library.sortWords(state.themeId, direction);
+    showToast("Wörter neu sortiert.", { type: "success", iconName: "check" });
+    renderPanel();
+  }
+
+  function openWordModal(word) {
+    const isEdit = Boolean(word);
+    const themes = library.getThemes();
+    const selectedTheme = word?.themeId || state.themeId || themes[0]?.id;
+    const content = `
+      <form id="word-form" autocomplete="off">
+        <div class="field-row">
+          ${field({ id: "de", label: "Deutsch", value: word?.de || "", required: true, autofocus: !isEdit, placeholder: "z. B. Hund" })}
+          ${field({ id: "en", label: "Englisch", value: word?.en || "", required: true, autofocus: isEdit, placeholder: "z. B. dog" })}
+        </div>
+        ${field({
+          id: "alternatives",
+          label: "Alternativen",
+          value: (word?.alternatives || []).join(" | "),
+          hint: "Mehrere Antworten mit | oder Komma trennen, z. B. „dog | doggy“.",
+          placeholder: "dog | doggy",
+        })}
+        ${field({
+          id: "example",
+          label: "Beispielsatz",
+          value: word?.example || "",
+          hint: "Wird im Feedback angezeigt. Englisch ist am besten.",
+          placeholder: "The dog is big.",
+        })}
+        <div class="field-row">
+          ${field({ id: "emoji", label: "Emoji", value: word?.emoji || "", placeholder: "🐶", hint: "Optional – hilft beim Erinnern." })}
+          <div class="field">
+            <label for="themeId">Thema</label>
+            <select class="select" id="themeId" name="themeId">
+              ${themes
+                .map(
+                  (theme) =>
+                    `<option value="${esc(theme.id)}" ${theme.id === selectedTheme ? "selected" : ""}>${esc(theme.emoji)} ${esc(theme.name)}</option>`
+                )
+                .join("")}
+            </select>
+          </div>
+        </div>
+        ${
+          isEdit
+            ? `<label class="check-row">
+                <input type="checkbox" id="keep-progress" name="keepProgress" checked>
+                <span>Lernfortschritt mitnehmen, wenn sich Deutsch, Englisch oder Thema ändern.</span>
+              </label>`
+            : ""
+        }
+      </form>`;
+
+    openModal({
+      title: isEdit ? "Wort bearbeiten" : "Neues Wort",
+      subtitle: isEdit ? "Änderungen gelten sofort für alle Runden." : "Das Wort wird am Ende des Themas eingefügt.",
+      content,
+      size: "modal-lg",
+      actions: [
+        { label: "Abbrechen", variant: "btn-ghost" },
+        {
+          label: "Speichern",
+          variant: "btn-primary",
+          iconName: "check",
+          onClick: async ({ dialog }) => {
+            clearModalError(dialog);
+            const form = dialog.querySelector("#word-form");
+            const get = (name) => form.elements[name]?.value ?? "";
+            const data = {
+              de: get("de").trim(),
+              en: get("en").trim(),
+              alternatives: get("alternatives")
+                .split(/[|,;]/)
+                .map((part) => part.trim())
+                .filter(Boolean),
+              example: get("example").trim(),
+              emoji: get("emoji").trim(),
+              themeId: get("themeId"),
+            };
+            if (!data.de || !data.en) {
+              modalError(dialog, "Bitte fülle Deutsch und Englisch aus.");
+              return false;
+            }
+            try {
+              if (isEdit) {
+                const keep = form.elements.keepProgress?.checked ?? true;
+                const result = await library.updateWord(word.id, data, { keepProgress: keep });
+                if (result.changed) {
+                  if (keep) await learner.migrateProgress(result.oldId, result.newId);
+                  else await learner.deleteProgress(result.oldId);
+                }
+                showToast("Wort gespeichert.", { type: "success", iconName: "check" });
+              } else {
+                await library.addWord(data.themeId, data);
+                showToast("Wort hinzugefügt.", { type: "success", iconName: "plus" });
+              }
+              state.themeId = data.themeId;
+              renderPanel();
+            } catch (error) {
+              modalError(dialog, error.message || "Das Wort konnte nicht gespeichert werden.");
+              return false;
+            }
+          },
+        },
+      ],
+    });
+  }
+
+  async function deleteWord(word) {
+    const ok = await confirmDialog({
+      title: "Wort löschen?",
+      message: `„${word.de} / ${word.en}“ wird aus dem Thema entfernt. Der Lernfortschritt für dieses Wort wird ebenfalls gelöscht.`,
+      confirmLabel: "Löschen",
+      danger: true,
+    });
+    if (!ok) return;
+    await library.deleteWord(word.id);
+    await learner.deleteProgress(word.id);
+    showToast("Wort gelöscht.", { iconName: "trash" });
+    renderPanel();
+  }
+
+  /* ---------- Themen ---------- */
+
+  function renderThemes(panel) {
+    const themes = library.getThemes();
+    const progress = learner.getProgressMap();
+    const points = learner.getProfile().points;
+
+    panel.innerHTML = `
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Themen</h2>
+            <p>${plural(themes.length, "Thema", "Themen")} · Reihenfolge bestimmt die Startseite</p>
+          </div>
+          <div class="row">
+            <button type="button" class="btn btn-ghost btn-small" data-action="sort-themes" ${themes.length > 1 ? "" : "disabled"}>A–Z</button>
+            <button type="button" class="btn btn-small" data-action="add-theme">${icon("plus")} Neues Thema</button>
+          </div>
+        </div>
+
+        ${
+          themes.length
+            ? `<div class="theme-admin-list">
+                ${themes
+                  .map((theme, index) => {
+                    const stats = library.getThemeStats(theme.id, progress);
+                    return `
+                    <div class="theme-admin-row">
+                      <span class="emoji" aria-hidden="true">${esc(theme.emoji)}</span>
+                      <div>
+                        <div class="name">${esc(theme.name)}</div>
+                        <div class="meta">
+                          ${plural(stats.total, "Wort", "Wörter")} · ${stats.mastered} gemeistert ·
+                          ${theme.unlockPoints > 0 ? `ab ${theme.unlockPoints} Punkten` : "sofort frei"} ·
+                          ${theme.origin === "default" ? "Standard" : "eigenes Thema"}
+                        </div>
+                      </div>
+                      <div class="actions">
+                        <button type="button" class="btn btn-soft btn-small" data-theme-action="manage" data-id="${esc(theme.id)}">Wörter</button>
+                        <button type="button" class="btn btn-ghost btn-small" data-theme-action="export" data-id="${esc(theme.id)}">${icon("download")} CSV</button>
+                        <button type="button" class="icon-btn tiny-btn" data-theme-action="up" data-id="${esc(theme.id)}" aria-label="Nach oben" ${index === 0 ? "disabled" : ""}>${icon("back", "icon-arrow-up")}</button>
+                        <button type="button" class="icon-btn tiny-btn" data-theme-action="down" data-id="${esc(theme.id)}" aria-label="Nach unten" ${index === themes.length - 1 ? "disabled" : ""}>${icon("forward", "icon-arrow-down")}</button>
+                        <button type="button" class="icon-btn tiny-btn" data-theme-action="edit" data-id="${esc(theme.id)}" aria-label="Thema bearbeiten">${icon("pencil")}</button>
+                        <button type="button" class="icon-btn tiny-btn" data-theme-action="delete" data-id="${esc(theme.id)}" aria-label="Thema löschen">${icon("trash")}</button>
+                      </div>
+                    </div>`;
+                  })
+                  .join("")}
+              </div>`
+            : `<div class="table-empty">Noch keine Themen. Lege das erste an!</div>`
+        }
+
+        <div class="callout mt-2">
+          ${icon("info")}
+          <div>
+            <p class="mb-0">Themen mit <strong>Punkte-Sperre</strong> öffnen sich erst, wenn dein Kind genug Punkte gesammelt hat.
+            Aktuell: <strong>${points} Punkte</strong>. Eigene Themen sind immer frei, wenn du 0 Punkte einträgst.</p>
+          </div>
+        </div>
+      </div>`;
+
+    panel.querySelector('[data-action="add-theme"]')?.addEventListener("click", () => openThemeModal(null));
+    panel.querySelector('[data-action="sort-themes"]')?.addEventListener("click", async () => {
+      await library.sortThemes("az");
+      showToast("Themen neu sortiert.", { type: "success", iconName: "check" });
+      renderPanel();
+    });
+
+    panel.querySelectorAll("[data-theme-action]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const theme = library.getTheme(button.dataset.id);
+        if (!theme) return;
+        switch (button.dataset.themeAction) {
+          case "manage":
+            state.themeId = theme.id;
+            state.tab = "words";
+            render();
+            break;
+          case "export":
+            exportThemeCsv(theme.id);
+            break;
+          case "up":
+            library.moveTheme(theme.id, "up").then(renderPanel);
+            break;
+          case "down":
+            library.moveTheme(theme.id, "down").then(renderPanel);
+            break;
+          case "edit":
+            openThemeModal(theme);
+            break;
+          case "delete":
+            deleteTheme(theme);
+            break;
+        }
+      });
+    });
+  }
+
+  function openThemeModal(theme) {
+    const isEdit = Boolean(theme);
+    const content = `
+      <form id="theme-form" autocomplete="off">
+        <div class="field-row">
+          ${field({ id: "name", label: "Name", value: theme?.name || "", required: true, autofocus: true, placeholder: "z. B. Tierwelt" })}
+          ${field({ id: "emoji", label: "Emoji", value: theme?.emoji || "📘", placeholder: "📘", hint: "Ein Symbol für die Themenkarte." })}
+        </div>
+        ${field({
+          id: "unlockPoints",
+          label: "Freischalten ab Punkten",
+          value: String(theme?.unlockPoints ?? 0),
+          type: "number",
+          hint: "0 = sofort frei. Empfehlung: 0, 60, 120, 200.",
+        })}
+        <p class="tiny muted mb-0">Ein eigenes Thema ist immer bearbeitbar. Standardthemen werden beim App-Update nicht überschrieben, sobald du sie änderst.</p>
+      </form>`;
+
+    openModal({
+      title: isEdit ? "Thema bearbeiten" : "Neues Thema",
+      content,
+      actions: [
+        { label: "Abbrechen", variant: "btn-ghost" },
+        {
+          label: "Speichern",
+          variant: "btn-primary",
+          iconName: "check",
+          onClick: async ({ dialog }) => {
+            clearModalError(dialog);
+            const form = dialog.querySelector("#theme-form");
+            const data = {
+              name: form.elements.name.value.trim(),
+              emoji: form.elements.emoji.value.trim(),
+              unlockPoints: Number.parseInt(form.elements.unlockPoints.value || "0", 10) || 0,
+            };
+            if (!data.name) {
+              modalError(dialog, "Bitte gib einen Namen für das Thema ein.");
+              return false;
+            }
+            try {
+              if (isEdit) {
+                await library.updateTheme(theme.id, data);
+                showToast("Thema gespeichert.", { type: "success", iconName: "check" });
+              } else {
+                const created = await library.addTheme(data);
+                state.themeId = created.id;
+                showToast("Thema angelegt. Jetzt Wörter hinzufügen!", { type: "success", iconName: "plus" });
+              }
+              renderPanel();
+            } catch (error) {
+              modalError(dialog, error.message || "Das Thema konnte nicht gespeichert werden.");
+              return false;
+            }
+          },
+        },
+      ],
+    });
+  }
+
+  async function deleteTheme(theme) {
+    const words = library.getWords(theme.id);
+    const ok = await confirmDialog({
+      title: "Thema löschen?",
+      message: `„${theme.name}“ und ${plural(words.length, "Wort", "Wörter")} werden gelöscht. Der zugehörige Lernfortschritt geht verloren. Ein Standardthema kann durch „Standardlisten wiederherstellen“ zurückkommen.`,
+      confirmLabel: "Thema löschen",
+      danger: true,
+    });
+    if (!ok) return;
+    const result = await library.deleteTheme(theme.id);
+    for (const id of result?.removedWordIds || []) await learner.deleteProgress(id);
+    if (state.themeId === theme.id) state.themeId = library.getThemes()[0]?.id || null;
+    showToast("Thema gelöscht.", { iconName: "trash" });
+    renderPanel();
+  }
+
+  function exportThemeCsv(themeId) {
+    try {
+      const count = transfer.downloadThemeCsv(themeId);
+      showToast(`${plural(count, "Wort", "Wörter")} als CSV exportiert.`, {
+        type: "success",
+        iconName: "download",
+      });
+    } catch (error) {
+      showToast(error.message || "Der Export ist fehlgeschlagen.", { type: "error" });
+    }
+  }
+
+  /* ---------- Import ---------- */
+
+  function renderImport(panel) {
+    const imp = state.import;
+    const themes = library.getThemes();
+    if (!imp.target) imp.target = themes[0]?.id || "__new__";
+    if (!themes.some((theme) => theme.id === imp.target) && imp.target !== "__new__") {
+      imp.target = themes[0]?.id || "__new__";
+    }
+    const analysis = imp.analysis;
+    const targetIsNew = imp.target === "__new__";
+
+    const previewRows = analysis
+      ? analysis.entries.slice(0, 100)
+          .map((entry) => {
+            const status = entry.errors.length
+              ? `<span class="row-status err">Fehler</span>`
+              : entry.duplicateInFile
+                ? `<span class="row-status warn">doppelt</span>`
+                : entry.existsByGerman && !targetIsNew
+                  ? `<span class="row-status warn">vorhanden</span>`
+                  : `<span class="row-status ok">neu</span>`;
+            return `
+              <tr>
+                <td>${entry.line}</td>
+                <td>${status}</td>
+                <td class="row-${entry.errors.length ? "error" : entry.warnings.length ? "warn" : ""}">${esc(entry.de)}</td>
+                <td class="row-${entry.errors.length ? "error" : entry.warnings.length ? "warn" : ""}">${esc(entry.en)}</td>
+                <td class="tiny">${esc(entry.alternatives.join(" | "))}</td>
+                <td class="tiny">${esc(entry.example)}</td>
+                <td>${esc(entry.emoji)}</td>
+              </tr>`;
+          })
+          .join("")
+      : "";
+
+    panel.innerHTML = `
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Vokabeln importieren</h2>
+            <p>CSV mit Semikolon: deutsch;englisch;alternativen;beispielsatz;emoji</p>
+          </div>
+        </div>
+
+        <div class="import-tabs" role="tablist" aria-label="Import-Quelle">
+          ${[
+            ["file", "Datei", "download"],
+            ["paste", "Einfügen", "pencil"],
+            ["url", "URL", "cloud"],
+          ]
+            .map(
+              ([id, label, iconName]) => `
+            <button type="button" class="import-tab" role="tab" data-import-source="${id}"
+                    aria-selected="${imp.source === id}">${icon(iconName)} ${label}</button>`
+            )
+            .join("")}
+        </div>
+
+        <div class="import-source">
+          ${
+            imp.source === "file"
+              ? `
+              <label class="dropzone" id="csv-dropzone" for="csv-file" tabindex="0">
+                ${icon("upload")}
+                <span>CSV-Datei hier ablegen oder tippen zum Auswählen</span>
+                <span class="tiny">UTF-8, max. 5 MB · Semikolon, Komma oder Tabulator</span>
+                ${imp.fileName ? `<span class="file-name">${esc(imp.fileName)}</span>` : ""}
+              </label>
+              <input type="file" id="csv-file" accept=".csv,.txt,text/csv,text/plain" class="sr-only">`
+              : imp.source === "paste"
+                ? `
+              <div class="field">
+                <label for="csv-paste">CSV-Text einfügen (z. B. aus Excel oder Google Sheets)</label>
+                <textarea class="textarea" id="csv-paste" rows="8" placeholder="deutsch;englisch;alternativen;beispielsatz;emoji&#10;Hund;dog;doggy;The dog is big.;🐶">${esc(imp.text)}</textarea>
+                <span class="hint">Die erste Zeile sollte die Spaltennamen enthalten. Kopiere den Bereich inklusive Kopfzeile.</span>
+              </div>
+              <button type="button" class="btn" data-action="analyze-paste">${icon("eye")} Vorschau erstellen</button>`
+                : `
+              <div class="field">
+                <label for="csv-url">Link zu einer CSV-Datei</label>
+                <input class="input" id="csv-url" type="url" inputmode="url" placeholder="https://example.com/vokabeln.csv" value="${esc(imp.source === "url" && /^https?:\/\//i.test(imp.fileName) ? imp.fileName : "")}">
+                <span class="hint">Die Datei muss öffentlich erreichbar sein (CORS erlaubt). Google-Sheets-Exportlinks funktionieren oft.</span>
+              </div>
+              <button type="button" class="btn" data-action="load-url" ${imp.busy ? "disabled" : ""}>
+                ${icon("cloud")} ${imp.busy ? "Lade …" : "Von URL laden"}
+              </button>`
+          }
+        </div>
+
+        ${imp.error ? `<div class="callout danger">${icon("info")}<p class="mb-0">${esc(imp.error)}</p></div>` : ""}
+
+        ${
+          analysis
+            ? `
+          <div class="preview-stats">
+            <span class="preview-stat">${plural(analysis.counts.total, "Zeile", "Zeilen")}</span>
+            <span class="preview-stat ok">${analysis.counts.valid} gültig</span>
+            ${analysis.counts.errors ? `<span class="preview-stat err">${analysis.counts.errors} mit Fehlern</span>` : ""}
+            ${analysis.counts.existingRows && !targetIsNew ? `<span class="preview-stat warn">${analysis.counts.existingRows} schon vorhanden</span>` : ""}
+            ${analysis.counts.duplicateRows ? `<span class="preview-stat warn">${analysis.counts.duplicateRows} doppelt</span>` : ""}
+            <span class="preview-stat">Trenner: ${analysis.delimiter === "\t" ? "Tabulator" : analysis.delimiter === "," ? "Komma" : "Semikolon"}</span>
+          </div>
+
+          ${analysis.globalErrors.length
+            ? `<div class="callout danger">${icon("info")}<div><strong>Bitte zuerst beheben:</strong><ul class="error-list">${analysis.globalErrors.map((error) => `<li>${esc(error)}</li>`).join("")}</ul></div></div>`
+            : ""}
+          ${analysis.warnings.length
+            ? `<div class="callout warn">${icon("info")}<div><ul class="error-list" style="background:none;border:0;padding-left:20px">${analysis.warnings.map((warning) => `<li>${esc(warning)}</li>`).join("")}</ul></div></div>`
+            : ""}
+
+          ${analysis.entries.some((entry) => entry.errors.length)
+            ? `<div class="callout danger">${icon("info")}<div><strong>Zeilen mit Fehlern werden übersprungen:</strong>
+                 <ul class="error-list">${analysis.entries
+                   .filter((entry) => entry.errors.length)
+                   .slice(0, 20)
+                   .map((entry) => `<li>${entry.errors.map((error) => esc(error)).join(" ")}</li>`)
+                   .join("")}</ul></div></div>`
+            : ""}
+
+          <div class="preview-table mt-2">
+            <table class="data preview">
+              <thead><tr><th>Zeile</th><th>Status</th><th>Deutsch</th><th>Englisch</th><th>Alternativen</th><th>Beispiel</th><th>Emoji</th></tr></thead>
+              <tbody>${previewRows}</tbody>
+            </table>
+          </div>
+          ${analysis.entries.length > 100 ? `<p class="scroll-hint">Nur die ersten 100 Zeilen werden angezeigt.</p>` : ""}
+        `
+            : ""
+        }
+
+        <div class="import-options">
+          <h3>Ziel</h3>
+          <div class="field-row">
+            <div class="field">
+              <label for="import-target">Thema</label>
+              <select class="select" id="import-target">
+                ${themes.map((theme) => `<option value="${esc(theme.id)}" ${theme.id === imp.target ? "selected" : ""}>${esc(theme.emoji)} ${esc(theme.name)}</option>`).join("")}
+                <option value="__new__" ${targetIsNew ? "selected" : ""}>+ Neues Thema anlegen</option>
+              </select>
+            </div>
+            ${
+              targetIsNew
+                ? `
+              <div class="field">
+                <label for="import-new-name">Name des neuen Themas</label>
+                <input class="input" id="import-new-name" value="${esc(imp.newName)}" placeholder="z. B. Weltraum">
+              </div>
+              <div class="field">
+                <label for="import-new-emoji">Emoji</label>
+                <input class="input" id="import-new-emoji" value="${esc(imp.newEmoji)}" placeholder="🚀">
+              </div>`
+                : ""
+            }
+          </div>
+
+          ${
+            targetIsNew
+              ? `<div class="callout">${icon("info")}<p class="mb-0">Das neue Thema wird angelegt und alle gültigen Zeilen werden hinzugefügt.</p></div>`
+              : `
+            <fieldset class="fieldset">
+              <legend>Was soll passieren?</legend>
+              ${IMPORT_MODES.map(
+                (mode) => `
+                <label class="radio-card">
+                  <input type="radio" name="import-mode" value="${mode.id}" ${imp.mode === mode.id ? "checked" : ""}>
+                  <span><strong>${esc(mode.title)}</strong><small>${esc(mode.desc)}</small></span>
+                </label>`
+              ).join("")}
+            </fieldset>`
+          }
+
+          <div class="btn-row">
+            <button type="button" class="btn btn-primary" data-action="apply-import"
+                    ${!analysis || analysis.globalErrors.length || !analysis.counts.valid || imp.busy ? "disabled" : ""}>
+              ${icon("check")} ${analysis ? `${analysis.counts.valid} ${analysis.counts.valid === 1 ? "Wort" : "Wörter"} importieren` : "Importieren"}
+            </button>
+            <button type="button" class="btn btn-ghost" data-action="discard-import">Verwerfen</button>
+            <button type="button" class="btn-link" data-action="download-template">${icon("download")} CSV-Vorlage herunterladen</button>
+          </div>
+        </div>
+      </div>`;
+
+    /* Quellen-Tabs */
+    panel.querySelectorAll("[data-import-source]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.import.source = button.dataset.importSource;
+        state.import.error = "";
+        renderPanel();
+      });
+    });
+
+    /* Datei */
+    const fileInput = panel.querySelector("#csv-file");
+    const dropzone = panel.querySelector("#csv-dropzone");
+    fileInput?.addEventListener("change", () => {
+      if (fileInput.files?.[0]) handleCsvFile(fileInput.files[0]);
+    });
+    ["dragenter", "dragover"].forEach((type) => {
+      dropzone?.addEventListener(type, (event) => {
+        event.preventDefault();
+        dropzone.classList.add("is-drag");
+      });
+    });
+    ["dragleave", "drop"].forEach((type) => {
+      dropzone?.addEventListener(type, (event) => {
+        event.preventDefault();
+        dropzone.classList.remove("is-drag");
+      });
+    });
+    dropzone?.addEventListener("drop", (event) => {
+      const file = event.dataTransfer?.files?.[0];
+      if (file) handleCsvFile(file);
+    });
+    dropzone?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        fileInput?.click();
+      }
+    });
+
+    /* Einfügen */
+    panel.querySelector('[data-action="analyze-paste"]')?.addEventListener("click", () => {
+      const textarea = panel.querySelector("#csv-paste");
+      state.import.text = textarea?.value || "";
+      state.import.fileName = "Eingefügter Text";
+      analyzeImport();
+      renderPanel();
+    });
+
+    /* URL */
+    panel.querySelector('[data-action="load-url"]')?.addEventListener("click", async () => {
+      const input = panel.querySelector("#csv-url");
+      const url = input?.value.trim() || "";
+      if (!/^https?:\/\//i.test(url)) {
+        state.import.error = "Bitte gib einen vollständigen Link ein (beginnend mit https://).";
+        renderPanel();
+        return;
+      }
+      state.import.busy = true;
+      state.import.error = "";
+      renderPanel();
+      try {
+        const response = await fetch(url, { headers: { Accept: "text/csv,text/plain,*/*" } });
+        if (!response.ok) throw new Error(`Der Server antwortet mit ${response.status}.`);
+        const text = await response.text();
+        state.import.text = text;
+        state.import.fileName = url;
+        analyzeImport();
+      } catch (error) {
+        state.import.error =
+          `Die Datei konnte nicht geladen werden. ${error.message} ` +
+          "Möglicherweise erlaubt der Server den Zugriff nicht (CORS) – lade die Datei dann herunter und nutze „Datei“.";
+      } finally {
+        state.import.busy = false;
+        renderPanel();
+      }
+    });
+
+    /* Ziel & Modus */
+    panel.querySelector("#import-target")?.addEventListener("change", (event) => {
+      state.import.target = event.target.value;
+      if (state.import.text) analyzeImport();
+      renderPanel();
+    });
+    panel.querySelector("#import-new-name")?.addEventListener("input", (event) => {
+      state.import.newName = event.target.value;
+    });
+    panel.querySelector("#import-new-emoji")?.addEventListener("input", (event) => {
+      state.import.newEmoji = event.target.value;
+    });
+    panel.querySelectorAll('input[name="import-mode"]').forEach((radio) => {
+      radio.addEventListener("change", () => {
+        state.import.mode = radio.value;
+      });
+    });
+
+    /* Aktionen */
+    panel.querySelector('[data-action="apply-import"]')?.addEventListener("click", () => applyImport());
+    panel.querySelector('[data-action="discard-import"]')?.addEventListener("click", () => {
+      state.import = freshImportState(library.getThemes()[0]?.id);
+      renderPanel();
+    });
+    panel.querySelector('[data-action="download-template"]')?.addEventListener("click", () => {
+      transfer.downloadCsvTemplate();
+      showToast("CSV-Vorlage heruntergeladen.", { type: "success", iconName: "download" });
+    });
+  }
+
+  async function handleCsvFile(file) {
+    try {
+      const text = await readTextFile(file);
+      state.import.text = text;
+      state.import.fileName = file.name;
+      state.import.error = "";
+      analyzeImport();
+    } catch (error) {
+      state.import.error = error.message || "Die Datei konnte nicht gelesen werden.";
+    }
+    renderPanel();
+  }
+
+  function analyzeImport() {
+    const imp = state.import;
+    imp.analysis = null;
+    if (!imp.text.trim()) {
+      imp.error = "Die Datei ist leer.";
+      return;
+    }
+    const themeId = imp.target === "__new__" ? null : imp.target;
+    try {
+      imp.analysis = transfer.analyzeVocabulary(imp.text, { themeId });
+      imp.error = "";
+    } catch (error) {
+      imp.error = error.message || "Die Datei konnte nicht gelesen werden.";
+    }
+  }
+
+  async function applyImport() {
+    const imp = state.import;
+    if (!imp.analysis) return;
+    const themeId = imp.target === "__new__" ? null : imp.target;
+    const newTheme =
+      imp.target === "__new__"
+        ? { name: imp.newName.trim(), emoji: imp.newEmoji.trim(), unlockPoints: 0 }
+        : null;
+
+    if (newTheme && !newTheme.name) {
+      imp.error = "Bitte gib einen Namen für das neue Thema ein.";
+      renderPanel();
+      return;
+    }
+
+    imp.busy = true;
+    renderPanel();
+    try {
+      const result = await transfer.applyVocabularyImport(imp.analysis, {
+        mode: imp.mode,
+        themeId,
+        newTheme,
+      });
+
+      for (const migration of result.migrations || []) {
+        await learner.migrateProgress(migration.from, migration.to);
+      }
+      for (const removedId of result.removedWordIds || []) {
+        await learner.deleteProgress(removedId);
+      }
+
+      const summary = [
+        result.added ? `${result.added} hinzugefügt` : "",
+        result.updated ? `${result.updated} aktualisiert` : "",
+        result.skipped ? `${result.skipped} übersprungen` : "",
+      ]
+        .filter(Boolean)
+        .join(", ");
+
+      state.import = freshImportState(result.themeId);
+      state.tab = "words";
+      state.themeId = result.themeId;
+      render();
+      showToast(summary || "Import abgeschlossen.", { type: "success", iconName: "check" });
+    } catch (error) {
+      imp.busy = false;
+      imp.error = error.message || "Der Import ist fehlgeschlagen.";
+      renderPanel();
+    }
+  }
+
+  /* ---------- Sichern & Zurücksetzen ---------- */
+
+  function renderBackup(panel) {
+    const themes = library.getThemes();
+    if (!state.backupThemeId || !library.getTheme(state.backupThemeId)) {
+      state.backupThemeId = themes[0]?.id || null;
+    }
+
+    panel.innerHTML = `
+      <div class="stack">
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Backup erstellen</h2>
+              <p>Eine Datei mit allem: Vokabeln, eigene Themen, Fortschritt und Einstellungen.</p>
+            </div>
+            <button type="button" class="btn btn-small" data-action="download-backup">
+              ${icon("download")} ${esc("speakup-backup.json")}
+            </button>
+          </div>
+          <div class="callout success">
+            ${icon("lock")}
+            <p class="mb-0"><strong>Alles bleibt lokal.</strong> Das Backup wird nur auf diesem Gerät erzeugt.
+            Es enthält bewusst <em>keine</em> Mikrofon- oder Handschrift-Einwilligung.</p>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Backup wiederherstellen</h2>
+              <p>Achtung: Ersetzt die aktuelle Vokabelliste und den Fortschritt.</p>
+            </div>
+          </div>
+          <label class="dropzone" for="backup-file" tabindex="0">
+            ${icon("upload")}
+            <span>speakup-backup.json auswählen</span>
+            <span class="tiny">Nach dem Einlesen wird die App neu geladen.</span>
+          </label>
+          <input type="file" id="backup-file" accept=".json,application/json" class="sr-only">
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>CSV exportieren</h2>
+              <p>Pro Thema eine Datei – perfekt zum Bearbeiten in Excel oder Google Sheets.</p>
+            </div>
+          </div>
+          <div class="toolbar">
+            <label class="sr-only" for="backup-theme">Thema für CSV-Export</label>
+            <select class="select" id="backup-theme" style="max-width:280px">
+              ${themes.map((theme) => `<option value="${esc(theme.id)}" ${theme.id === state.backupThemeId ? "selected" : ""}>${esc(theme.emoji)} ${esc(theme.name)} (${library.getWords(theme.id).length})</option>`).join("")}
+            </select>
+            <button type="button" class="btn btn-soft btn-small" data-action="export-csv">${icon("download")} Thema als CSV</button>
+            <button type="button" class="btn-link" data-action="download-template">${icon("download")} Leere Vorlage</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Zurücksetzen</h2>
+              <p>Bitte vorsichtig verwenden – Aktionen lassen sich nicht rückgängig machen.</p>
+            </div>
+          </div>
+          <div class="settings-list">
+            <div class="setting-row">
+              <div class="setting-text">
+                <strong>Standardlisten wiederherstellen</strong>
+                <small>Eigene Wörter und Themen werden verworfen. Der Fortschritt bleibt, wo die IDs gleich sind.</small>
+              </div>
+              <button type="button" class="btn btn-ghost btn-small" data-action="reset-library">Wiederherstellen</button>
+            </div>
+            <div class="setting-row">
+              <div class="setting-text">
+                <strong>Lernfortschritt zurücksetzen</strong>
+                <small>Punkte, Level, Abzeichen, Serien und Boxen werden gelöscht. Wörter bleiben erhalten.</small>
+              </div>
+              <button type="button" class="btn btn-ghost btn-small" data-action="reset-progress">Zurücksetzen</button>
+            </div>
+            <div class="setting-row">
+              <div class="setting-text">
+                <strong>Alle Daten löschen</strong>
+                <small>Löscht Wörter, Fortschritt, Einstellungen und Einwilligung. Danach startet SpeakUp wie neu.</small>
+              </div>
+              <button type="button" class="btn btn-danger btn-small" data-action="wipe-all">Alles löschen</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout">
+          ${icon("info")}
+          <p class="mb-0">Tipp: Erstelle vor größeren Änderungen ein Backup. Die Datei heißt
+          <code>speakup-backup.json</code> und kann auf ein anderes Gerät kopiert werden.</p>
+        </div>
+      </div>`;
+
+    panel.querySelector('[data-action="download-backup"]')?.addEventListener("click", async () => {
+      try {
+        await transfer.downloadBackup();
+        showToast("Backup heruntergeladen.", { type: "success", iconName: "download" });
+      } catch (error) {
+        showToast(error.message || "Das Backup konnte nicht erstellt werden.", { type: "error" });
+      }
+    });
+
+    const backupInput = panel.querySelector("#backup-file");
+    backupInput?.addEventListener("change", () => {
+      if (backupInput.files?.[0]) restoreFromFile(backupInput.files[0]);
+    });
+    panel.querySelector('label[for="backup-file"]')?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        backupInput?.click();
+      }
+    });
+
+    panel.querySelector("#backup-theme")?.addEventListener("change", (event) => {
+      state.backupThemeId = event.target.value;
+    });
+    panel.querySelector('[data-action="export-csv"]')?.addEventListener("click", () => {
+      if (state.backupThemeId) exportThemeCsv(state.backupThemeId);
+    });
+    panel.querySelector('[data-action="download-template"]')?.addEventListener("click", () => {
+      transfer.downloadCsvTemplate();
+      showToast("CSV-Vorlage heruntergeladen.", { type: "success", iconName: "download" });
+    });
+
+    panel.querySelector('[data-action="reset-library"]')?.addEventListener("click", async () => {
+      const ok = await confirmDialog({
+        title: "Standardlisten wiederherstellen?",
+        message: "Eigene Wörter und Themen werden gelöscht. Der Lernfortschritt bleibt bei Wörtern erhalten, die es weiterhin gibt.",
+        confirmLabel: "Wiederherstellen",
+        danger: true,
+      });
+      if (!ok) return;
+      try {
+        const result = await library.resetToDefaults();
+        await learner.pruneProgress(library.getAllWords().map((word) => word.id));
+        for (const removed of result.removedWordIds) await learner.deleteProgress(removed);
+        state.themeId = library.getThemes()[0]?.id || null;
+        state.backupThemeId = state.themeId;
+        showToast("Standardlisten wiederhergestellt.", { type: "success", iconName: "check" });
+        renderPanel();
+      } catch (error) {
+        showToast(error.message || "Die Standardlisten konnten nicht geladen werden.", { type: "error" });
+      }
+    });
+
+    panel.querySelector('[data-action="reset-progress"]')?.addEventListener("click", async () => {
+      const ok = await confirmDialog({
+        title: "Lernfortschritt zurücksetzen?",
+        message: "Punkte, Level, Abzeichen, Tages-Serie und alle Wiederholungs-Boxen werden gelöscht. Die Vokabeln bleiben erhalten.",
+        confirmLabel: "Fortschritt löschen",
+        danger: true,
+      });
+      if (!ok) return;
+      await learner.resetProgress();
+      await learner.reloadSessions();
+      showToast("Lernfortschritt zurückgesetzt.", { type: "success", iconName: "refresh" });
+      renderPanel();
+    });
+
+    panel.querySelector('[data-action="wipe-all"]')?.addEventListener("click", async () => {
+      const first = await confirmDialog({
+        title: "Wirklich alle Daten löschen?",
+        message: "Wörter, Themen, Fortschritt, Einstellungen und die Einwilligung werden unwiderruflich gelöscht.",
+        confirmLabel: "Weiter",
+        danger: true,
+      });
+      if (!first) return;
+      const second = await confirmDialog({
+        title: "Letzte Warnung",
+        message: "Möchtest du wirklich alles löschen? Ein Backup kannst du vorher über „Backup erstellen“ sichern.",
+        confirmLabel: "Ja, alles löschen",
+        danger: true,
+      });
+      if (!second) return;
+      try {
+        await db.clearAll();
+        try {
+          storeUnlock(false);
+        } catch {
+          /* ignorieren */
+        }
+        showToast("Alle Daten gelöscht. SpeakUp startet neu.", { iconName: "trash" });
+        setTimeout(() => window.location.reload(), 700);
+      } catch (error) {
+        showToast(error.message || "Die Daten konnten nicht gelöscht werden.", { type: "error" });
+      }
+    });
+  }
+
+  async function restoreFromFile(file) {
+    try {
+      const text = await readTextFile(file, 20 * 1024 * 1024);
+      const check = transfer.validateBackup(text);
+      if (!check.valid) {
+        showToast(check.error, { type: "error", iconName: "info" });
+        return;
+      }
+      const data = check.backup.data;
+      const ok = await confirmDialog({
+        title: "Backup wiederherstellen?",
+        message:
+          `Das Backup enthält ${plural(data.library.themes.length, "Thema", "Themen")}, ` +
+          `${plural(data.library.words.length, "Wort", "Wörter")} und ` +
+          `${plural(data.progress?.length || 0, "Fortschrittseintrag", "Fortschrittseinträge")}. ` +
+          "Die aktuellen Daten werden ersetzt.",
+        confirmLabel: "Wiederherstellen",
+        danger: true,
+      });
+      if (!ok) return;
+      await transfer.restoreBackup(check.backup);
+      showToast("Backup eingespielt. Die App wird neu geladen …", { type: "success", iconName: "check" });
+      setTimeout(() => window.location.reload(), 900);
+    } catch (error) {
+      showToast(error.message || "Das Backup konnte nicht wiederhergestellt werden.", { type: "error" });
+    }
+  }
+
+  /* ---------- Fortschritt ---------- */
+
+  function renderStats(panel) {
+    const allWords = library.getAllWords();
+    const progress = learner.getProgressMap();
+    const profile = learner.getProfile();
+    const boxes = learner.getBoxCounts();
+    const query = state.statsSearch.trim().toLowerCase();
+
+    const rows = allWords
+      .map((word) => {
+        const theme = library.getTheme(word.themeId);
+        const record = progress.get(word.id);
+        return {
+          word,
+          theme,
+          record,
+          seen: record?.seen || 0,
+          correct: record?.correct || 0,
+          wrong: record?.wrong || 0,
+          box: record?.box || 1,
+          accuracy: record?.seen ? record.correct / record.seen : -1,
+          lastSeen: record?.lastSeen || 0,
+        };
+      })
+      .filter((row) => {
+        if (!query) return true;
+        return `${row.word.de} ${row.word.en} ${row.theme?.name || ""}`.toLowerCase().includes(query);
+      });
+
+    const sorters = {
+      wrong: (a, b) =>
+        (a.seen ? 0 : 1) - (b.seen ? 0 : 1) ||
+        b.wrong - a.wrong ||
+        a.accuracy - b.accuracy ||
+        a.word.de.localeCompare(b.word.de, "de"),
+      box: (a, b) => (a.seen ? 0 : 1) - (b.seen ? 0 : 1) || a.box - b.box || b.wrong - a.wrong,
+      az: (a, b) => a.word.de.localeCompare(b.word.de, "de"),
+      accuracy: (a, b) => (a.seen ? 0 : 1) - (b.seen ? 0 : 1) || a.accuracy - b.accuracy,
+    };
+    rows.sort(sorters[state.statsSort] || sorters.wrong);
+
+    const started = rows.filter((row) => row.seen > 0).length;
+    const mastered = [...progress.values()].filter((record) => record.seen && record.box >= 5).length;
+    const seenTotal = Object.values(boxes).reduce((sum, value) => sum + value, 0);
+
+    panel.innerHTML = `
+      <div class="stack">
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Lernstand</h2>
+              <p>${plural(allWords.length, "Wort", "Wörter")} · ${mastered} gemeistert · ${profile.points} Punkte</p>
+            </div>
+            <button type="button" class="btn btn-ghost btn-small" data-action="reset-progress">${icon("refresh")} Fortschritt zurücksetzen</button>
+          </div>
+
+          <div class="stat-grid">
+            <div class="stat-card"><span class="stat-icon">${icon("chart")}</span><strong>${started}</strong><span>Wörter angefangen</span></div>
+            <div class="stat-card"><span class="stat-icon">${icon("star")}</span><strong>${mastered}</strong><span>in Box 5</span></div>
+            <div class="stat-card"><span class="stat-icon">${icon("check")}</span><strong>${profile.totalCorrect}</strong><span>richtige Antworten</span></div>
+            <div class="stat-card"><span class="stat-icon">${icon("refresh")}</span><strong>${profile.sessions}</strong><span>Runden</span></div>
+          </div>
+
+          <div class="toolbar mt-3">
+            <label class="sr-only" for="stats-search">Wörter durchsuchen</label>
+            <input class="input" id="stats-search" type="search" placeholder="Wort oder Thema suchen …"
+                   value="${esc(state.statsSearch)}" style="max-width:260px">
+            <label class="sr-only" for="stats-sort">Sortierung</label>
+            <select class="select" id="stats-sort" style="max-width:220px">
+              <option value="wrong" ${state.statsSort === "wrong" ? "selected" : ""}>Meiste Fehler zuerst</option>
+              <option value="box" ${state.statsSort === "box" ? "selected" : ""}>Niedrigste Box zuerst</option>
+              <option value="accuracy" ${state.statsSort === "accuracy" ? "selected" : ""}>Schwächste Quote</option>
+              <option value="az" ${state.statsSort === "az" ? "selected" : ""}>Alphabetisch</option>
+            </select>
+            <span class="spacer"></span>
+            <span class="tiny muted">${rows.length} Einträge</span>
+          </div>
+
+          ${
+            rows.length
+              ? `<div class="table-wrap">
+                  <table class="data">
+                    <thead><tr>
+                      <th scope="col">Wort</th><th scope="col">Thema</th><th scope="col">Box</th>
+                      <th scope="col">Gesehen</th><th scope="col">Richtig</th><th scope="col">Fehler</th>
+                      <th scope="col">Quote</th><th scope="col">Zuletzt</th><th scope="col">Aktion</th>
+                    </tr></thead>
+                    <tbody>
+                      ${rows
+                        .map((row) => {
+                          const accuracy = row.seen ? `${Math.round(row.accuracy * 100)} %` : "–";
+                          return `
+                          <tr data-search="${esc(`${row.word.de} ${row.word.en} ${row.theme?.name || ""}`.toLowerCase())}">
+                            <td><strong>${esc(row.word.de)}</strong><div class="tiny muted">${esc(row.word.en)}</div></td>
+                            <td class="tiny">${esc(row.theme?.emoji || "")} ${esc(row.theme?.name || "–")}</td>
+                            <td><span class="preview-stat">${row.seen ? row.box : "neu"}</span></td>
+                            <td>${row.seen}</td>
+                            <td>${row.correct}</td>
+                            <td>${row.wrong}</td>
+                            <td class="bold">${accuracy}</td>
+                            <td class="tiny muted">${row.lastSeen ? esc(formatDate(row.lastSeen)) : "–"}</td>
+                            <td class="actions">
+                              <button type="button" class="icon-btn tiny-btn" data-stat-speak="${esc(row.word.en)}" aria-label="Wort vorlesen">${icon("speaker")}</button>
+                              <button type="button" class="icon-btn tiny-btn" data-stat-reset="${esc(row.word.id)}" aria-label="Fortschritt dieses Wortes löschen" ${row.seen ? "" : "disabled"}>${icon("refresh")}</button>
+                            </td>
+                          </tr>`;
+                        })
+                        .join("")}
+                    </tbody>
+                  </table>
+                </div>
+                <p class="scroll-hint">Quote = richtige Antworten geteilt durch alle Versuche.</p>`
+              : `<div class="table-empty">Keine Wörter gefunden.</div>`
+          }
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><div><h2>Wiederholungs-Boxen</h2><p>${seenTotal} Wörter im System</p></div></div>
+          <div class="box-chart">
+            ${[1, 2, 3, 4, 5]
+              .map((box) => {
+                const count = boxes[box] || 0;
+                const percent = seenTotal ? Math.round((count / seenTotal) * 100) : 0;
+                return `
+                <div class="box-row">
+                  <span class="box-label"><span class="box-chip">${box}</span> ${esc(learner.LEITNER_LABELS[box])}</span>
+                  <span class="box-bar"><span style="width:${percent}%"></span></span>
+                  <span class="tiny bold muted">${count}</span>
+                </div>`;
+              })
+              .join("")}
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><div><h2>Rundenverlauf</h2><p>Die letzten 12 Runden</p></div></div>
+          <div id="parent-history" class="history-list"><div class="table-empty">Wird geladen …</div></div>
+          <div class="btn-row mt-2">
+            <button type="button" class="btn btn-ghost btn-small" data-action="clear-history">${icon("trash")} Verlauf löschen</button>
+          </div>
+        </div>
+      </div>`;
+
+    panel.querySelector("#stats-search")?.addEventListener("input", (event) => {
+      state.statsSearch = event.target.value;
+      const search = state.statsSearch.trim().toLowerCase();
+      panel.querySelectorAll("tbody tr[data-search]").forEach((row) => {
+        row.hidden = Boolean(search) && !row.dataset.search.includes(search);
+      });
+    });
+
+    panel.querySelector("#stats-sort")?.addEventListener("change", (event) => {
+      state.statsSort = event.target.value;
+      renderPanel();
+    });
+
+    panel.querySelectorAll("[data-stat-speak]").forEach((button) => {
+      button.addEventListener("click", () => {
+        unlockTts();
+        speak(button.dataset.statSpeak, { rate: learner.getSettings().speechRate || 0.9 });
+      });
+    });
+
+    panel.querySelectorAll("[data-stat-reset]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const word = library.getWord(button.dataset.statReset);
+        if (!word) return;
+        const ok = await confirmDialog({
+          title: "Fortschritt löschen?",
+          message: `Der Lernstand von „${word.de} / ${word.en}“ wird gelöscht. Das Wort selbst bleibt erhalten.`,
+          confirmLabel: "Löschen",
+          danger: true,
+        });
+        if (!ok) return;
+        await learner.deleteProgress(word.id);
+        showToast("Fortschritt für dieses Wort gelöscht.", { iconName: "refresh" });
+        renderPanel();
+      });
+    });
+
+    panel.querySelector('[data-action="reset-progress"]')?.addEventListener("click", async () => {
+      const ok = await confirmDialog({
+        title: "Gesamten Fortschritt zurücksetzen?",
+        message: "Punkte, Level, Abzeichen, Serie und alle Boxen werden gelöscht. Wörter und Themen bleiben erhalten.",
+        confirmLabel: "Zurücksetzen",
+        danger: true,
+      });
+      if (!ok) return;
+      await learner.resetProgress();
+      await learner.reloadSessions();
+      showToast("Fortschritt zurückgesetzt.", { type: "success", iconName: "refresh" });
+      renderPanel();
+    });
+
+    panel.querySelector('[data-action="clear-history"]')?.addEventListener("click", async () => {
+      const ok = await confirmDialog({
+        title: "Verlauf löschen?",
+        message: "Nur die Liste der letzten Runden wird gelöscht. Punkte und Abzeichen bleiben erhalten.",
+        confirmLabel: "Verlauf löschen",
+        danger: true,
+      });
+      if (!ok) return;
+      await db.sessionsClear();
+      await learner.reloadSessions();
+      showToast("Verlauf gelöscht.", { iconName: "trash" });
+      renderPanel();
+    });
+
+    let aliveHistory = true;
+    learner
+      .getSessions()
+      .then((sessions) => {
+        if (!aliveHistory) return;
+        const list = panel.querySelector("#parent-history");
+        if (!list) return;
+        if (!sessions.length) {
+          list.innerHTML = `<div class="table-empty">Noch keine Runde abgeschlossen.</div>`;
+          return;
+        }
+        list.innerHTML = sessions
+          .slice(0, 12)
+          .map((session) => {
+            const theme = session.themeId ? library.getTheme(session.themeId) : null;
+            const accuracy = session.attempts ? Math.round((session.firstTryCorrect / (session.totalWords || 1)) * 100) : null;
+            return `
+              <div class="history-row">
+                <span class="history-emoji" aria-hidden="true">${esc(theme?.emoji || "🌈")}</span>
+                <div class="history-main">
+                  <strong>${esc(theme?.name || "Alle Themen")} · ${esc(MODE_LABELS[session.mode] || "Mix")}</strong>
+                  <small>${esc(formatDate(session.at))} · ${plural(session.totalWords || 0, "Wort", "Wörter")} ·
+                  ${session.firstTryCorrect ?? "–"} beim ersten Versuch · ${esc(formatDuration(session.durationMs))}</small>
+                </div>
+                <span class="history-points">+${session.points || 0}</span>
+              </div>`;
+          })
+          .join("");
+      })
+      .catch(() => {
+        const list = panel.querySelector("#parent-history");
+        if (list) list.innerHTML = `<div class="table-empty">Der Verlauf konnte nicht geladen werden.</div>`;
+      });
+  }
+
+  /* ---------- Einstellungen ---------- */
+
+  function renderSettings(panel) {
+    const settings = learner.getSettings();
+    const consent = learner.getConsent();
+    const level = learner.getLevelInfo();
+    const lib = library.getLibrary();
+    const stand = isStandalone();
+
+    panel.innerHTML = `
+      <div class="stack">
+        <div class="panel">
+          <div class="panel-head"><div><h2>Lernen &amp; Darstellung</h2><p>Gilt sofort für alle Runden.</p></div></div>
+          <div class="settings-list">
+            <div class="setting-row">
+              <div class="setting-text">
+                <strong>Toneffekte</strong>
+                <small>Kurze Töne bei richtig/falsch. Die Vorlese-Stimme bleibt davon unberührt.</small>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="set-effects" ${settings.effects ? "checked" : ""} aria-label="Toneffekte">
+                <span class="switch-track"></span>
+              </label>
+            </div>
+            <div class="setting-row">
+              <div class="setting-text">
+                <strong>Englisch automatisch vorlesen</strong>
+                <small>Im Hörmodus wird das Wort direkt abgespielt.</small>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="set-autospeak" ${settings.autoSpeak ? "checked" : ""} aria-label="Automatisch vorlesen">
+                <span class="switch-track"></span>
+              </label>
+            </div>
+            <div class="setting-row">
+              <div class="setting-text">
+                <strong>Handschrifterkennung</strong>
+                <small>Wenn aus, lernen Kinder nur mit Tastatur. Die Striche würden sonst an Google Input Tools gesendet.</small>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="set-handwriting" ${settings.handwriting !== false ? "checked" : ""} aria-label="Handschrifterkennung">
+                <span class="switch-track"></span>
+              </label>
+            </div>
+            <div class="setting-row">
+              <div class="setting-text">
+                <strong>Vorlese-Geschwindigkeit</strong>
+                <small>Aktuell: ${settings.speechRate || 0.9}× – langsamer ist für den Anfang besser.</small>
+              </div>
+              <label class="sr-only" for="set-rate">Vorlese-Geschwindigkeit</label>
+              <select class="select" id="set-rate" style="max-width:150px">
+                <option value="0.7" ${Number(settings.speechRate) === 0.7 ? "selected" : ""}>0,7×</option>
+                <option value="0.8" ${Number(settings.speechRate) === 0.8 ? "selected" : ""}>0,8×</option>
+                <option value="0.9" ${Number(settings.speechRate) === 0.9 ? "selected" : ""}>0,9×</option>
+                <option value="1" ${Number(settings.speechRate) === 1 ? "selected" : ""}>1,0×</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><div><h2>Datenschutz &amp; Einwilligung</h2><p>Mikrofon und Handschrift sind Online-Funktionen.</p></div></div>
+          <div class="callout ${consent?.allowOnline ? "success" : "warn"}">
+            ${icon(consent?.allowOnline ? "check" : "info")}
+            <div>
+              <p class="mb-1"><strong>${consent?.allowOnline ? "Online-Funktionen sind erlaubt." : "Online-Funktionen sind aus."}</strong></p>
+              <p class="mb-0">${
+                consent?.allowOnline
+                  ? "Sprachaufnahmen gehen an den Spracherkennungsdienst des Browsers, Schreibstriche an Google Input Tools. SpeakUp speichert beides nicht."
+                  : "Dein Kind lernt mit Tippen und Vorlesen. Es werden keine Sprachaufnahmen oder Schreibstriche gesendet."
+              }</p>
+            </div>
+          </div>
+          <div class="btn-row mt-2">
+            <button type="button" class="btn btn-soft btn-small" data-action="consent-allow">${icon("mic")} Erlauben</button>
+            <button type="button" class="btn btn-ghost btn-small" data-action="consent-deny">${icon("lock")} Nicht erlauben / widerrufen</button>
+            <button type="button" class="btn-link" data-action="consent-info">${icon("info")} Datenschutzhinweis ansehen</button>
+          </div>
+          ${consent ? `<p class="tiny muted mt-2 mb-0">Gespeichert am ${esc(formatDate(new Date(consent.acceptedAt).getTime()))}.</p>` : ""}
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><div><h2>App installieren</h2><p>${stand ? "SpeakUp läuft bereits als App." : "Als App auf dem Startbildschirm ablegen."}</p></div></div>
+          <p class="small">${esc(installHint())}</p>
+          <div class="btn-row">
+            ${
+              canInstall()
+                ? `<button type="button" class="btn btn-small" data-action="install">${icon("download")} App installieren</button>`
+                : ""
+            }
+            <a class="btn btn-ghost btn-small" href="#/ueber">${icon("info")} Mehr über SpeakUp</a>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><div><h2>Über diese Installation</h2></div></div>
+          <div class="settings-list">
+            <div class="setting-row">
+              <div class="setting-text"><strong>Version</strong><small>App ${esc(APP_VERSION)} · Daten ${esc(lib.dataVersion || "unbekannt")}</small></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-text"><strong>Inhalte</strong><small>${plural(lib.themes.length, "Thema", "Themen")} · ${plural(lib.words.length, "Wort", "Wörter")} · Level ${level.level} (${esc(level.title)})</small></div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-text">
+                <strong>Speicher</strong>
+                <small>${db.usingFallback ? "localStorage (eingeschränkter Modus)" : "IndexedDB auf diesem Gerät"} · <span id="storage-detail">wird geprüft …</span></small>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-text"><strong>Elternbereich</strong><small>Die Rechenaufgabe ist eine Hürde für Kinder, keine Sicherheitsmaßnahme.</small></div>
+              <button type="button" class="btn btn-ghost btn-small" data-action="lock">${icon("lock")} Sperren</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+
+    panel.querySelector("#set-effects")?.addEventListener("change", async (event) => {
+      const value = event.target.checked;
+      setSfxEnabled(value);
+      await learner.updateSettings({ effects: value });
+      if (value) sfx.correct();
+    });
+
+    panel.querySelector("#set-autospeak")?.addEventListener("change", async (event) => {
+      await learner.updateSettings({ autoSpeak: event.target.checked });
+      showToast(event.target.checked ? "Wort wird automatisch vorgelesen." : "Automatisches Vorlesen ist aus.", {
+        iconName: "speaker",
+      });
+    });
+
+    panel.querySelector("#set-handwriting")?.addEventListener("change", async (event) => {
+      await learner.updateSettings({ handwriting: event.target.checked });
+      showToast(
+        event.target.checked
+          ? "Handschrifterkennung ist an."
+          : "Handschrifterkennung ist aus – es wird getippt.",
+        { iconName: "pencil" }
+      );
+    });
+
+    panel.querySelector("#set-rate")?.addEventListener("change", async (event) => {
+      await learner.updateSettings({ speechRate: Number(event.target.value) || 0.9 });
+      unlockTts();
+      speak("Hello! Let's learn English.", { rate: Number(event.target.value) || 0.9 });
+    });
+
+    panel.querySelector('[data-action="consent-allow"]')?.addEventListener("click", async () => {
+      await learner.setConsent(true);
+      showToast("Online-Funktionen erlaubt.", { type: "success", iconName: "check" });
+      renderPanel();
+    });
+
+    panel.querySelector('[data-action="consent-deny"]')?.addEventListener("click", async () => {
+      await learner.setConsent(false);
+      showToast("Online-Funktionen sind aus. Es wird getippt.", { iconName: "keyboard" });
+      renderPanel();
+    });
+
+    panel.querySelector('[data-action="consent-info"]')?.addEventListener("click", () => {
+      showConsentModal({ onDone: () => renderPanel() });
+    });
+
+    panel.querySelector('[data-action="install"]')?.addEventListener("click", async () => {
+      const result = await promptInstall();
+      if (result.outcome === "accepted") {
+        showToast("SpeakUp wird installiert. 🎉", { type: "success", iconName: "check" });
+      } else if (result.outcome === "unavailable") {
+        showToast(installHint(), { iconName: "info" });
+      }
+    });
+
+    panel.querySelector('[data-action="lock"]')?.addEventListener("click", () => {
+      state.unlocked = false;
+      storeUnlock(false);
+      state.gate = makeGateTask();
+      state.gateError = "";
+      render();
+    });
+
+    // Speicherbelegung (rein informativ)
+    if (navigator.storage?.estimate) {
+      navigator.storage
+        .estimate()
+        .then((estimate) => {
+          const detail = panel.querySelector("#storage-detail");
+          if (!detail || !estimate) return;
+          const used = estimate.usage || 0;
+          const mb = used > 1024 * 1024 ? `${(used / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(used / 1024))} KB`;
+          detail.textContent = `${mb} belegt`;
+        })
+        .catch(() => {});
+    }
+  }
+
+  /* ---------- Start ---------- */
+
+  // Bei Änderungen von außen (z. B. Fortschritt) nur die Ansicht aktualisieren,
+  // wenn das Panel sichtbar ist. So bleiben offene Modale unberührt.
+  const offLibrary = bus.on("library:change", () => {
+    if (alive && state.unlocked && !document.querySelector(".modal-backdrop")) {
+      renderPanel();
+    }
+  });
+
+  render();
+
+  return () => {
+    alive = false;
+    offLibrary();
+  };
+}
+
+export default renderParent;
