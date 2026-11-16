@@ -31,6 +31,7 @@ import { renderProgress } from "./views/progress.js";
 import { renderParent } from "./views/parent.js";
 import { renderAbout } from "./views/about.js";
 import { showConsentModal } from "./views/onboarding.js";
+import { applyHandwritingProvider } from "./core/handwriting-cloud.js";
 
 const BASE_TITLE = "SpeakUp – Englisch lernen mit Sprache & Stift";
 
@@ -85,6 +86,15 @@ function syncSound() {
   soundBtn.setAttribute("aria-pressed", String(enabled));
   soundBtn.setAttribute("aria-label", enabled ? "Toneffekte ausschalten" : "Toneffekte einschalten");
   soundBtn.innerHTML = `<svg class="icon" aria-hidden="true"><use href="#i-sound-${enabled ? "on" : "off"}"/></svg>`;
+}
+
+/** Wählt den im Elternbereich eingestellten Handschrift-Anbieter. */
+function syncHandwritingProvider() {
+  try {
+    applyHandwritingProvider(learner.getSettings() || {});
+  } catch (error) {
+    console.warn("[app] Handschrift-Anbieter konnte nicht gesetzt werden", error);
+  }
 }
 
 function setActiveTab(tabId) {
@@ -198,7 +208,10 @@ function wireNavigation() {
 
   // Punkte und Einstellungen aus anderen Ansichten übernehmen.
   bus.on("learner:change", () => syncPoints({ animate: true }));
-  bus.on("settings:change", () => syncSound());
+  bus.on("settings:change", () => {
+    syncSound();
+    syncHandwritingProvider();
+  });
   bus.on("progress:change", () => syncPoints());
 
   // Ansichten können einen vollständigen Neuaufbau anfordern, ohne den
@@ -259,6 +272,7 @@ async function boot() {
     const hadLibrary = Boolean(await db.kvGet("library"));
     await learner.init();
     const info = await library.init();
+    syncHandwritingProvider();
 
     // Falls Standardwörter umbenannt wurden, den Fortschritt übernehmen.
     for (const migration of info.migrations || []) {

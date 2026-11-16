@@ -33,7 +33,7 @@ export function showConsentModal({ firstRun = false, onDone = null } = {}) {
       <span class="consent-icon">${icon("pencil")}</span>
       <div>
         <strong>✍️ Handschrift</strong>
-        <p>Deine Striche auf der Zeichenfläche werden als Punktdaten an Google Input Tools geschickt, damit das Wort erkannt wird. Auch diese Daten werden von SpeakUp nicht gespeichert. Der Dienst ist nicht offiziell dokumentiert und kann ausfallen – dann kannst du tippen.</p>
+        <p>Deine Striche auf der Zeichenfläche werden als Bild an den eingestellten Schreib-Lese-Dienst geschickt, damit das Wort erkannt wird. Standard ist Google Input Tools; Eltern können im Elternbereich auch Google Cloud Vision oder Gemini wählen. Diese Bilder werden von SpeakUp nicht gespeichert. Die Erkennung kann ausfallen – dann kannst du tippen.</p>
       </div>
     </div>
 

@@ -40,6 +40,9 @@ const DEFAULT_SETTINGS = {
   mode: "mix",
   lastThemeId: "tiere",
   handwriting: true,
+  // Anbieter: "google-input-tools" | "google-vision" | "gemini" | "off"
+  handwritingProvider: "google-input-tools",
+  handwritingModel: "gemini-3.5-flash-lite",
 };
 
 const DEFAULT_PROFILE = {

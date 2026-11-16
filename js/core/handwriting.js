@@ -1,16 +1,22 @@
 /**
  * Handschrifterkennung – austauschbares Modul.
  *
- * Standard-Anbieter: Google Input Tools (Handwriting API, en).
- * Die API ist ein öffentlicher, nicht offiziell dokumentierter Dienst.
- * Deshalb ist die Anbindung gekapselt: Ein anderer Anbieter muss nur
- * dieselbe Schnittstelle erfüllen:
+ * Anbieter:
+ *   - google-input-tools : kostenlos, ohne Einrichtung, aber unzuverlässig
+ *   - google-vision      : sehr genaue Handschrift-OCR (optional, API-Key)
+ *   - gemini             : KI-Transkription (optional, API-Key)
+ *   - off                : nur Tippen
  *
- *   { id: string, label: string, recognize(strokes, {width, height, lang}) }
+ * Die Cloud-Anbieter liegen in handwriting-cloud.js und registrieren sich
+ * über registerHandwritingProvider(). Ein eigener Dienst muss nur dieselbe
+ * Schnittstelle erfüllen:
+ *
+ *   { id: string, label: string, recognize(strokes, {width, height, lang, model}) }
  *     → Promise<string[]>
  *
  * Bei Fehlern wirft der Anbieter einen HandwritingError mit .code:
- * "offline" | "timeout" | "network" | "too-little-ink" | "invalid-response" | "disabled"
+ * "offline" | "timeout" | "network" | "too-little-ink" | "invalid-response"
+ * | "disabled" | "auth" | "rate-limit"
  */
 
 const GOOGLE_ENDPOINT = "https://inputtools.google.com/request?itc=en-t-i0-handwrit&app=demopage";
@@ -24,7 +30,7 @@ export class HandwritingError extends Error {
   }
 }
 
-function filterCandidates(rawCandidates) {
+export function filterCandidates(rawCandidates) {
   if (!Array.isArray(rawCandidates)) return [];
   const seen = new Set();
   const result = [];

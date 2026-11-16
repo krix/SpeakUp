@@ -120,7 +120,10 @@ function renderEmpty(main) {
 function runRound(main, config, onRestart) {
   const settings = learner.getSettings();
   const allowOnline = learner.canUseOnlineFeatures();
-  const handwritingAllowed = allowOnline && settings.handwriting !== false;
+  const handwritingAllowed =
+    allowOnline &&
+    settings.handwriting !== false &&
+    settings.handwritingProvider !== "off";
 
   const theme = config.themeId ? library.getTheme(config.themeId) : null;
   const pool = getWordPool(config.themeId);
@@ -411,8 +414,9 @@ function runRound(main, config, onRestart) {
         showConsentModal({
           onDone: (consent) => {
             if (consent?.allowOnline) {
+              const latest = learner.getSettings();
               state.allowOnline = true;
-              state.handwritingAllowed = learner.getSettings().handwriting !== false;
+              state.handwritingAllowed = latest.handwriting !== false && latest.handwritingProvider !== "off";
             }
           },
         });
@@ -581,6 +585,7 @@ function runRound(main, config, onRestart) {
         width: size.width,
         height: size.height,
         lang: "en",
+        model: learner.getSettings().handwritingModel,
       });
       if (!state.alive || state.answered) return;
       setPadStatus("");

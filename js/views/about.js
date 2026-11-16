@@ -90,7 +90,9 @@ export function renderAbout(main) {
             <div>
               <strong>Nur mit deiner Erlaubnis online</strong>
               <p>Sprachaufnahmen gehen zur Erkennung an den Dienst deines Browsers
-              (bei Chrome z. B. Google). Schreibstriche gehen an Google Input Tools.
+              (bei Chrome z. B. Google). Schreibstriche werden als Bild an den
+              eingestellten Dienst geschickt (Standard: Google Input Tools,
+              optional Google Cloud Vision oder Gemini).
               ${esc(APP_NAME)} speichert beides nicht. Ohne Erlaubnis lernst du mit Tippen.</p>
             </div>
           </div>
@@ -148,12 +150,16 @@ export function renderAbout(main) {
           </details>
           <details class="faq-item">
             <summary>Meine Handschrift wird nicht erkannt.</summary>
-            <p>Die Erkennung nutzt den nicht offiziell dokumentierten Dienst
-            Google Input Tools. Er kann sich ändern oder ausfallen, und die
-            Erkennungsqualität ist derzeit nicht zuverlässig. SpeakUp zeigt
-            dann einen Hinweis und bietet sofort das Tippen an. Schreibe in
-            Druckbuchstaben und prüfe, ob Online-Funktionen erlaubt sind.
-            Zum Üben ist Tippen der zuverlässigste Weg.</p>
+            <p>Standardmäßig nutzt die Erkennung den nicht offiziell dokumentierten
+            Dienst Google Input Tools. Er kann ausfallen, und die
+            Erkennungsqualität ist nicht zuverlässig. Eltern können im
+            Elternbereich <strong>Google Cloud Vision</strong> (1.000 Bilder pro
+            Monat kostenlos, sehr genaue Handschrift-OCR) oder
+            <strong>Gemini</strong> (KI mit kostenlosem Kontingent) mit einem
+            eigenen API-Schlüssel einrichten. Ohne Schlüssel oder bei einem
+            Fehler zeigt SpeakUp einen Hinweis und bietet sofort das Tippen an.
+            Schreibe in Druckbuchstaben und prüfe, ob Online-Funktionen erlaubt
+            sind. Zum Üben ist Tippen der zuverlässigste Weg.</p>
           </details>
           <details class="faq-item">
             <summary>Warum klingt die Vorlese-Stimme komisch?</summary>

@@ -804,6 +804,18 @@ table.preview td.row-warn { background: #FFFBF0; }
 .switch input:checked + .switch-track::after { transform: translateX(24px); }
 .switch input:focus-visible + .switch-track { outline: 3px solid var(--c-focus); outline-offset: 3px; }
 
+/* Handschrift-Anbieter im Elternbereich */
+.provider-config { margin-top: 14px; display: flex; flex-direction: column; gap: 14px; }
+.provider-config .callout { margin: 0; }
+.provider-config .field { margin-bottom: 0; }
+.key-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.key-row .input { flex: 1 1 220px; }
+.provider-help { border-top: 1px solid var(--c-line); padding-top: 8px; }
+.provider-help summary { cursor: pointer; font-weight: 900; min-height: 44px; display: flex; align-items: center; }
+.provider-help ol { margin: 6px 0 10px 20px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.provider-help a { color: var(--c-primary); text-decoration: underline; }
+[data-key-status].is-ok { color: var(--c-green); font-weight: 800; }
+
 /* ---------- Über-Seite ---------- */
 .about-hero { text-align: center; padding: clamp(20px, 4vw, 34px); }
 .about-logo { width: 120px; height: 120px; border-radius: 28px; box-shadow: var(--shadow-md); }

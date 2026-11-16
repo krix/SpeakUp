@@ -20,9 +20,10 @@ Sprechen, hören, mit dem Stift schreiben oder tippen: SpeakUp kombiniert vier L
 8. [Fortschritt, IDs und Backups](#fortschritt-ids-und-backups)
 9. [Installation als App](#installation-als-app)
 10. [Hosting](#hosting)
-11. [Datenschutz](#datenschutz)
-12. [Grenzen und bekannte Einschränkungen](#grenzen-und-bekannte-einschränkungen)
-13. [Nächste Schritte](#nächste-schritte)
+11. [Handschrifterkennung: Anbieter einrichten](#handschrifterkennung-anbieter-einrichten)
+12. [Datenschutz](#datenschutz)
+13. [Grenzen und bekannte Einschränkungen](#grenzen-und-bekannte-einschränkungen)
+14. [Nächste Schritte](#nächste-schritte)
 
 ---
 
@@ -39,7 +40,7 @@ Sprechen, hören, mit dem Stift schreiben oder tippen: SpeakUp kombiniert vier L
 - **Tolerante Antwortprüfung:** Groß-/Kleinschreibung, Leerzeichen, Satzzeichen, Umlaute und alternative Lösungen werden berücksichtigt. Kleine Tippfehler werden über eine Ähnlichkeitsprüfung erkannt.
 - **Leitner-System mit fünf Boxen.** Richtig beantwortete Wörter wandern eine Box weiter, Fehler führen zurück in Box 1. Die Intervalle sind 1, 2, 4, 7 und 14 Tage. Nur der erste Versuch einer Runde verändert die Box.
 - **Sprachausgabe** über `SpeechSynthesis` mit englischer Stimme (`en-GB`/`en-US`), wahlweise langsamer.
-- **Handschrift** über Pointer Events – Stift, Finger und Maus. Palm Rejection, Undo und Löschen sind eingebaut.
+- **Handschrift** über Pointer Events – Stift, Finger und Maus. Palm Rejection, Undo und Löschen sind eingebaut. Die Erkennung ist austauschbar: Google Input Tools (Standard, ohne Einrichtung), Google Cloud Vision oder Gemini (eigener API-Schlüssel im Elternbereich).
 - **Immer ein Fallback:** Ohne Mikrofon, ohne Online-Erlaubnis oder ohne Handschrifterkennung kann jedes Wort getippt werden.
 
 ### Motivation
@@ -121,10 +122,12 @@ SpeakUp/
 │  │  ├─ csv.js            CSV-Parser und -Serializer
 │  │  ├─ db.js             IndexedDB + localStorage-Fallback
 │  │  ├─ handwriting.js    austauschbarer Handschrift-Provider
+│  │  ├─ handwriting-cloud.js  Cloud-Anbieter (Vision, Gemini)
 │  │  ├─ hash.js           stabile Wort-IDs (cyrb53)
 │  │  ├─ install.js        PWA-Installationslogik
 │  │  ├─ learner.js        Leitner, Punkte, Level, Abzeichen, Profil
 │  │  ├─ library.js        Themen/Wörter, Import, Merge, Tombstones
+│  │  ├─ secrets.js        lokale API-Schlüssel (nie im Backup)
 │  │  ├─ speech.js         Web-Speech-Erkennung
 │  │  ├─ transfer.js       Import, Export, Backup, Restore
 │  │  └─ tts.js            Sprachausgabe
@@ -162,7 +165,7 @@ SpeakUp/
 - **`library.js`** hält Themen und Wörter, mischt Standardlisten ein und schützt eigene Änderungen. Gelöschte Standardwörter und -themen werden als Tombstones gespeichert, damit sie bei einem Update nicht zurückkehren.
 - **`learner.js`** hält Profil, Einstellungen, Einwilligung, Fortschritt und Sitzungsverlauf. Der Fortschritt hängt ausschließlich an der stabilen Wort-ID.
 - **`transfer.js`** bündelt Import, Export und Backup; die Ansichten enthalten keine Dateiformat-Logik.
-- Die Handschrifterkennung ist über `setHandwritingProvider()` austauschbar. Standard ist Google Input Tools.
+- Die Handschrifterkennung ist über `setHandwritingProvider()` austauschbar. Standard ist Google Input Tools; im Elternbereich lassen sich Google Cloud Vision und Gemini als genauere Cloud-Anbieter wählen.
 
 ---
 
@@ -279,7 +282,7 @@ Der Elternbereich ist über eine zweistellige Multiplikationsaufgabe geschützt.
 | **Import** | CSV aus Datei, Einfügen oder URL; Vorschau; Zielthema oder neues Thema; Importmodus. |
 | **Sichern** | JSON-Backup erstellen/wiederherstellen, CSV pro Thema exportieren, leere Vorlage laden, Standardlisten wiederherstellen, Fortschritt oder alle Daten löschen. |
 | **Fortschritt** | Statistik pro Wort, Sortierung nach Fehlern/Box/Quote, Box-Verteilung, Rundenverlauf, Fortschritt einzelner Wörter löschen. |
-| **Einstellungen** | Toneffekte, automatisches Vorlesen, Handschrifterkennung, Vorlese-Geschwindigkeit, Online-Einwilligung, Installation, Speicherbelegung. |
+| **Einstellungen** | Toneffekte, automatisches Vorlesen, Handschrift-Anbieter inkl. API-Schlüssel, Vorlese-Geschwindigkeit, Online-Einwilligung, Installation, Speicherbelegung. |
 
 Die Entsperrung gilt für die aktuelle Browser-Sitzung (`sessionStorage`). Beim Schließen des Tabs wird sie zurückgesetzt.
 
@@ -313,7 +316,7 @@ Daraus folgen die Regeln:
 - Fortschritt pro Wort,
 - Rundenverlauf.
 
-**Nicht** enthalten ist die Einwilligung zu Mikrofon und Handschrift. Nach dem Wiederherstellen muss sie bewusst neu erteilt werden.
+**Nicht** enthalten sind die Einwilligung zu Mikrofon und Handschrift sowie die optionalen **API-Schlüssel**. Nach dem Wiederherstellen muss die Einwilligung bewusst neu erteilt und ein Schlüssel auf dem neuen Gerät neu gespeichert werden.
 
 Die Wiederherstellung ersetzt die aktuellen Daten und lädt die App neu. Vorher wird die Anzahl der Themen, Wörter und Fortschrittseinträge angezeigt.
 
@@ -321,7 +324,7 @@ Die Wiederherstellung ersetzt die aktuellen Daten und lädt die App neu. Vorher 
 
 - **Standardlisten wiederherstellen:** Eigene Wörter/Themen werden verworfen; Fortschritt bleibt bei Wörtern mit gleicher ID.
 - **Lernfortschritt zurücksetzen:** Punkte, Level, Abzeichen, Serie und Boxen werden gelöscht; Wörter bleiben.
-- **Alle Daten löschen:** löscht Bibliothek, Fortschritt, Einstellungen und Einwilligung. Die App startet wie neu.
+- **Alle Daten löschen:** löscht Bibliothek, Fortschritt, Einstellungen, Einwilligung und gespeicherte API-Schlüssel. Die App startet wie neu.
 
 ---
 
@@ -385,12 +388,62 @@ Mikrofon und Service Worker funktionieren auf `localhost` ohne Zertifikat. Für 
 
 ---
 
+## Handschrifterkennung: Anbieter einrichten
+
+Die Erkennung ist bewusst austauschbar. Im Elternbereich unter **Einstellungen → Handschrift-Erkennung** stehen vier Optionen zur Wahl:
+
+| Anbieter | Einrichtung | Kosten (Stand 2026) | Qualität |
+|---|---|---|---|
+| **Google Input Tools** | keine | kostenlos, inoffiziell | unzuverlässig |
+| **Google Cloud Vision** | Google-Cloud-Projekt + API-Schlüssel | 1.000 Einheiten/Monat gratis | sehr gut bei Handschrift |
+| **Google Gemini (KI)** | API-Schlüssel aus AI Studio | Free Tier mit Tageslimits | gut, kann sich verlesen |
+| **Aus** | keine | – | nur Tippen |
+
+### Google Cloud Vision (Empfehlung)
+
+1. In der [Google Cloud Console](https://console.cloud.google.com/) ein Projekt anlegen (oder ein vorhandenes wählen).
+2. Die [Cloud Vision API](https://console.cloud.google.com/apis/library/vision.googleapis.com) aktivieren.
+3. Unter **APIs & Dienste → Anmeldedaten** einen **API-Schlüssel** erstellen.
+4. Den Schlüssel einschränken:
+   - **API-Einschränkung:** nur „Cloud Vision API“
+   - **HTTP-Referrer:** die Adresse, unter der SpeakUp läuft (z. B. `https://deine-seite.example/*`), plus `http://localhost:8000/*` für Tests
+5. Den Schlüssel im Elternbereich einfügen, **speichern** und **Verbindung testen** wählen.
+
+**Kosten:** Die erste 1.000 Einheiten pro Monat ist kostenlos; jede weitere wird abgerechnet. Ohne hinterlegtes Abrechnungskonto schlägt die Anfrage nach Erreichen des Kontingents fehl – die App fällt dann auf Tippen zurück. Details: [Vision-Preise](https://cloud.google.com/vision/pricing), [Kontingente](https://cloud.google.com/vision/quotas).
+
+**Was übertragen wird:** SpeakUp rendert die Striche als PNG (schwarze Schrift auf weißem Grund, zugeschnitten, mit Rand) und sendet nur dieses Bild mit `languageHints: ["en"]`. Keine Roh-Striche, keine Zeitstempel, keine Namen. Das Bild wird von SpeakUp nicht gespeichert.
+
+### Google Gemini (KI, kostenloses Kontingent)
+
+1. In [Google AI Studio](https://aistudio.google.com/app/apikey) einen API-Schlüssel erstellen.
+2. Schlüssel im Elternbereich speichern. Das Modell ist standardmäßig `gemini-3.5-flash-lite` und kann dort geändert werden (es muss Bilder verstehen).
+3. **Verbindung testen** prüft Schlüssel und Modellverfügbarkeit, ohne ein Bild zu senden.
+
+**Wichtig:** Im kostenlosen Tarif darf Google die eingesendeten Inhalte zum Verbessern der Produkte verwenden. Hier sind das nur einzelne Vokabel-Bilder, aber es ist ein anderer Datenfluss als bei einem bezahlten Konto. Ein KI-Modell kann außerdem Wörter „erfinden“; SpeakUp prüft die Antwort deshalb weiterhin gegen die Vokabelliste und zeigt bei Nichtübereinstimmung einen Hinweis. Free-Tier-Limits: [Gemini-Rate-Limits](https://ai.google.dev/gemini-api/docs/rate-limits), [Preise](https://ai.google.dev/gemini-api/docs/pricing).
+
+### Google Input Tools (Standard, ohne Einrichtung)
+
+Der bisherige Standard ist ein öffentlicher, **nicht offiziell dokumentierter** Endpunkt. In Tests lieferte er für realistische Druckbuchstaben oft nur Symbole oder gar keine brauchbaren Wörter. Er bleibt als einrichtungsfreie Option erhalten, ist aber für den Lernalltag nicht empfehlenswert.
+
+### Ohne Cloud
+
+Handschrift im Elternbereich auf **Aus** stellen: Kinder tippen dann. Für einen späteren Ausbau ist ein lokales Modell (z. B. TrOCR mit Transformers.js) denkbar – es braucht aber rund 67 MB Download und ist auf schwachen Geräten langsam. Deshalb ist es noch nicht eingebaut.
+
+### API-Schlüssel: was Sie wissen sollten
+
+- Schlüssel liegen **getrennt von den Einstellungen** in IndexedDB/localStorage und sind **nie Teil eines Backups** oder eines CSV-Exports.
+- Ein Schlüssel in einer reinen Browser-App ist für jeden lesbar, der Zugriff auf das Gerät hat. Für den Familiengebrauch ist das vertretbar; für eine öffentliche Installation mit vielen Kindern sollte ein eigener Proxy dazwischen.
+- Beim Anbieter einschränken: nur die jeweilige API und möglichst den HTTP-Referrer.
+- **Entfernen** löscht den Schlüssel sofort; die Erkennung fällt auf Tippen zurück.
+
+---
+
 ## Datenschutz
 
 - **Keine Konten, keine Werbung, keine Tracker, keine Analytics.**
 - Lernstände, eigene Wörter und Einstellungen bleiben in IndexedDB auf dem Gerät (Fallback: localStorage).
 - **Spracherkennung:** Die Web Speech API sendet die Aufnahme an den Erkennungsdienst des Browser-Herstellers (bei Chrome typischerweise Google). SpeakUp speichert keine Audiodaten.
-- **Handschrift:** Die Striche werden als Punktdaten an Google Input Tools gesendet. SpeakUp speichert sie nicht.
+- **Handschrift:** Die Striche werden lokal als PNG gerendert und an den im Elternbereich gewählten Dienst gesendet (Standard: Google Input Tools; optional Google Cloud Vision oder Gemini). SpeakUp speichert das Bild nicht. Ohne Einwilligung oder bei „Aus“ wird nichts gesendet.
 - **Vorlesen:** `SpeechSynthesis` nutzt die Stimmen des Geräts. Wenn eine lokale englische Stimme vorhanden ist, werden keine Daten gesendet.
 - **URL-Import:** Die eingegebene CSV-URL wird direkt vom Browser geladen. Dabei werden keine Daten an Dritte außer dem gewählten Server übertragen.
 - Die Einwilligung ist freiwillig. Ohne sie lernt das Kind ausschließlich mit Tippen und Vorlesen.
@@ -403,7 +456,7 @@ Mikrofon und Service Worker funktionieren auf `localhost` ohne Zertifikat. Für 
 
 - **Web Speech API:** Nicht in jedem Browser verfügbar. Firefox unterstützt sie nicht; Safari/iOS nur eingeschränkt und teils mit Siri-/Diktat-Abhängigkeit. Die App fällt auf Tippen zurück.
 - **Mikrofon:** Benötigt eine sichere Umgebung (HTTPS/localhost) und eine Berechtigung. Verweigerte Berechtigungen werden kindgerecht erklärt.
-- **Handschrifterkennung:** Google Input Tools ist ein **nicht offiziell dokumentierter** Dienst. Er kann sich ändern, rate-limitieren oder ausfallen. Die Erkennungsqualität ist derzeit nicht zuverlässig – der öffentliche Endpunkt liefert für viele Eingaben keine brauchbaren Wörter. SpeakUp verwirft unbrauchbare Kandidaten, zeigt einen verständlichen Hinweis und bietet sofort das Tippen an. Der Provider ist über `setHandwritingProvider()` austauschbar; für den produktiven Einsatz empfiehlt sich ein eigener oder lokal laufender Erkennungsdienst.
+- **Handschrifterkennung:** Google Input Tools ist ein **nicht offiziell dokumentierter** Dienst. Er kann sich ändern, rate-limitieren oder ausfallen; der öffentliche Endpunkt liefert für viele Eingaben keine brauchbaren Wörter. Deshalb gibt es im Elternbereich zwei optionalen Cloud-Anbieter: **Google Cloud Vision** (1.000 Einheiten/Monat kostenlos, sehr genaue Handschrift-OCR) und **Gemini** (KI mit kostenlosem Kontingent, kann sich verlesen). Beide brauchen einen eigenen API-Schlüssel und Internet. SpeakUp verwirft unbrauchbare Kandidaten, zeigt einen verständlichen Hinweis und bietet sofort das Tippen an. Der Provider ist über `setHandwritingProvider()` austauschbar; ein lokales Modell ist als Ausbau geplant.
 - **Sprachausgabe:** Die Qualität hängt von den installierten Stimmen ab. Fehlt eine englische Stimme, klingt die Aussprache deutsch. Auf iOS muss die Ausgabe teilweise durch eine Nutzergeste freigeschaltet werden.
 - **Offline:** Der erste Start muss online erfolgen, damit App-Shell und Vokabeln geladen werden können. Danach funktioniert die App offline. Spracherkennung und Handschrift benötigen weiterhin Internet.
 - **Keine Synchronisierung:** Daten liegen nur auf einem Gerät/Browser. Umzug nur über Backup-Datei.
@@ -429,7 +482,7 @@ Ideen für eine spätere Version:
 - **Optionales Cloud-Backup** mit Ende-zu-Ende-Verschlüsselung und ausdrücklicher Einwilligung.
 - **Automatisierte Tests** für Antwortprüfung, CSV-Parser, Import-Modi und Fortschrittsmigration.
 - **Vollständiger Accessibility-Audit** mit Screenreader- und Kontrastprüfung.
-- **Eigene Handschrift-Provider** (z. B. lokal mit TensorFlow.js), um die Abhängigkeit von Google zu reduzieren.
+- **Eigene Handschrift-Provider** (z. B. lokal mit Transformers.js/TrOCR) einbauen, um die Abhängigkeit von Google zu reduzieren. Das quantisierte Modell ist ca. 67 MB groß und derzeit für schwache Geräte zu schwer.
 
 ---
 

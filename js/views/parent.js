@@ -34,6 +34,8 @@ import { speak, unlockTts } from "../core/tts.js";
 import { mascot } from "../ui/mascot.js";
 import { showConsentModal } from "./onboarding.js";
 import { canInstall, promptInstall, installHint, isStandalone } from "../core/install.js";
+import { PROVIDER_INFO, isCloudProvider, testCloudProvider } from "../core/handwriting-cloud.js";
+import { getApiKey, setApiKey, clearApiKey } from "../core/secrets.js";
 
 const TABS = [
   { id: "words", label: "Wörter", iconName: "pencil" },
@@ -1114,7 +1116,8 @@ export function renderParent(main) {
           <div class="callout success">
             ${icon("lock")}
             <p class="mb-0"><strong>Alles bleibt lokal.</strong> Das Backup wird nur auf diesem Gerät erzeugt.
-            Es enthält bewusst <em>keine</em> Mikrofon- oder Handschrift-Einwilligung.</p>
+            Es enthält bewusst <em>keine</em> Mikrofon- oder Handschrift-Einwilligung
+            und <em>keine</em> API-Schlüssel.</p>
           </div>
         </div>
 
@@ -1559,12 +1562,230 @@ export function renderParent(main) {
 
   /* ---------- Einstellungen ---------- */
 
+  /**
+   * Erklärt den gewählten Handschrift-Anbieter und blendet Schlüssel-Felder ein.
+   * Der Schlüssel selbst wird nie vorausgefüllt, nur sein Status.
+   */
+  function providerConfigMarkup(settings) {
+    const provider = settings.handwritingProvider || "google-input-tools";
+
+    if (provider === "off") {
+      return `<div class="callout">
+        ${icon("keyboard")}
+        <p class="mb-0">Handschrift ist aus. Dein Kind übt mit Tastatur und Vorlesen – es werden keine Schreibbilder gesendet.</p>
+      </div>`;
+    }
+
+    if (provider === "google-input-tools") {
+      return `<div class="callout warn">
+        ${icon("info")}
+        <div>
+          <p class="mb-1"><strong>Ohne Einrichtung, aber unzuverlässig.</strong></p>
+          <p class="mb-0 small">Dieser Dienst ist nicht offiziell dokumentiert. In Tests erkannte er einfache Druckbuchstaben oft falsch. Für verlässliche Treffer empfehlen wir Google Cloud Vision – dort sind 1.000 Bilder pro Monat kostenlos.</p>
+        </div>
+      </div>`;
+    }
+
+    const isVision = provider === "google-vision";
+    const info = PROVIDER_INFO[provider] || {};
+    const id = isVision ? "google-vision" : "gemini";
+    const intro = isVision
+      ? `<p class="mb-1"><strong>Sehr genaue Handschrift-OCR.</strong></p>
+         <p class="mb-0 small">Ein Bild der Schrift geht an Google Cloud Vision. 1.000 Einheiten pro Monat sind kostenlos; erst danach wird es kostenpflichtig – vorausgesetzt, im Google-Projekt ist ein Abrechnungskonto hinterlegt.</p>`
+      : `<p class="mb-1"><strong>KI-Transkription mit kostenlosem Kontingent.</strong></p>
+         <p class="mb-0 small">Ein Bild der Schrift geht an Google Gemini. Im kostenlosen Tarif darf Google die Inhalte zum Verbessern der Produkte verwenden – hier sind das nur einzelne Vokabel-Bilder. Ein KI-Modell kann sich außerdem verlesen.</p>`;
+
+    return `
+      <div class="provider-config">
+        <div class="callout ${isVision ? "success" : "warn"}">
+          ${icon(isVision ? "cloud" : "info")}
+          <div>${intro}</div>
+        </div>
+
+        <div class="field">
+          <label class="small bold" for="key-input-${id}">API-Schlüssel</label>
+          <div class="key-row">
+            <input class="input" id="key-input-${id}" data-key-input="${id}"
+                   type="password" autocomplete="off" spellcheck="false"
+                   placeholder="Schlüssel einfügen …" aria-describedby="key-status-${id}">
+            <button type="button" class="btn btn-ghost btn-small" data-key-toggle="${id}" aria-pressed="false">
+              ${icon("eye")} Zeigen
+            </button>
+          </div>
+          <p class="tiny muted mb-0" id="key-status-${id}" data-key-status="${id}" role="status">wird geprüft …</p>
+        </div>
+
+        ${
+          isVision
+            ? ""
+            : `<div class="field">
+                 <label class="small bold" for="model-input-gemini">Modell</label>
+                 <input class="input" id="model-input-gemini" data-model-input="gemini" type="text"
+                        spellcheck="false" autocomplete="off"
+                        value="${esc(settings.handwritingModel || "gemini-3.5-flash-lite")}">
+                 <p class="tiny muted mb-0">Muss ein Gemini-Modell sein, das Bilder versteht. Die Änderung wird beim Verlassen des Feldes gespeichert.</p>
+               </div>`
+        }
+
+        <div class="btn-row">
+          <button type="button" class="btn btn-small" data-key-save="${id}">${icon("check")} Schlüssel speichern</button>
+          <button type="button" class="btn btn-soft btn-small" data-key-test="${id}">${icon("refresh")} Verbindung testen</button>
+          <button type="button" class="btn btn-ghost btn-small" data-key-clear="${id}">${icon("trash")} Entfernen</button>
+        </div>
+
+        <details class="provider-help">
+          <summary>Einrichtung, Kosten &amp; Datenschutz</summary>
+          <ol class="small">
+            ${
+              isVision
+                ? `<li>Im Google-Cloud-Projekt die <a href="${info.docsUrl}" target="_blank" rel="noopener noreferrer">Cloud Vision API aktivieren</a>.</li>
+                   <li>Unter „Anmeldedaten“ einen <a href="${info.keyUrl}" target="_blank" rel="noopener noreferrer">API-Schlüssel</a> erstellen.</li>
+                   <li>Den Schlüssel einschränken: API „Cloud Vision API“ und – wenn möglich – HTTP-Referrer eurer SpeakUp-Adresse.</li>
+                   <li>Schlüssel hier einfügen, speichern und „Verbindung testen“ wählen.</li>
+                   <li>Gratis-Kontingent und Grenzen stehen in den <a href="${info.quotaUrl}" target="_blank" rel="noopener noreferrer">Vision-Kontingenten</a>.</li>`
+                : `<li>In Google AI Studio einen <a href="${info.keyUrl}" target="_blank" rel="noopener noreferrer">API-Schlüssel</a> erstellen.</li>
+                   <li>Free-Tier-Limits und Preise in der <a href="${info.quotaUrl}" target="_blank" rel="noopener noreferrer">Gemini-Dokumentation</a> prüfen.</li>
+                   <li>Schlüssel speichern, Modell prüfen und „Verbindung testen“ wählen.</li>
+                   <li>Im kostenlosen Tarif dürfen Eingaben zum Verbessern von Google-Produkten verwendet werden. Wer das nicht möchte, nutzt Google Vision (kostenpflichtiges Konto nötig) oder tippt.</li>`
+            }
+          </ol>
+          <p class="tiny muted mb-0">
+            Der Schlüssel liegt nur auf diesem Gerät, ist für jeden mit Gerätezugriff lesbar
+            und wird <strong>nicht</strong> ins Backup geschrieben. Für eine Veröffentlichung
+            mit vielen Kindern ist ein eigener Server dazwischen die sicherere Variante.
+          </p>
+        </details>
+      </div>`;
+  }
+
+  async function hydrateProviderConfig(panel) {
+    const settings = learner.getSettings();
+    const provider = settings.handwritingProvider || "google-input-tools";
+    if (!isCloudProvider(provider)) return;
+    const status = panel.querySelector(`[data-key-status="${provider}"]`);
+    if (!status) return;
+    const key = await getApiKey(provider);
+    if (!status.isConnected) return;
+    status.textContent = key
+      ? "Ein Schlüssel ist gespeichert – nur auf diesem Gerät, nicht im Backup."
+      : "Noch kein Schlüssel gespeichert – die Erkennung bleibt so lange aus.";
+    status.classList.toggle("is-ok", Boolean(key));
+  }
+
+  function bindProviderConfig(panel) {
+    const settings = learner.getSettings();
+    const provider = settings.handwritingProvider || "google-input-tools";
+
+    panel.querySelector("#set-handwriting-provider")?.addEventListener("change", async (event) => {
+      const value = event.target.value;
+      await learner.updateSettings({
+        handwritingProvider: value,
+        handwriting: value !== "off",
+      });
+      renderPanel();
+      showToast(
+        value === "off"
+          ? "Handschrift ist aus – es wird getippt."
+          : `Handschrift-Anbieter: ${PROVIDER_INFO[value]?.label || value}.`,
+        { iconName: "pencil" }
+      );
+    });
+
+    if (!isCloudProvider(provider)) return;
+
+    panel.querySelector(`[data-key-toggle="${provider}"]`)?.addEventListener("click", (event) => {
+      const input = panel.querySelector(`[data-key-input="${provider}"]`);
+      if (!input) return;
+      const show = input.type === "password";
+      input.type = show ? "text" : "password";
+      event.currentTarget.setAttribute("aria-pressed", String(show));
+      event.currentTarget.innerHTML = `${icon("eye")} ${show ? "Verbergen" : "Zeigen"}`;
+    });
+
+    panel.querySelector(`[data-key-save="${provider}"]`)?.addEventListener("click", async () => {
+      const input = panel.querySelector(`[data-key-input="${provider}"]`);
+      const value = input?.value.trim() || "";
+      if (!value) {
+        input?.focus();
+        showToast("Bitte zuerst einen API-Schlüssel einfügen.", { type: "warn", iconName: "info" });
+        return;
+      }
+      await setApiKey(provider, value);
+      input.value = "";
+      await hydrateProviderConfig(panel);
+      showToast("Schlüssel gespeichert. Er bleibt auf diesem Gerät und ist nicht im Backup.", {
+        type: "success",
+        iconName: "check",
+      });
+    });
+
+    panel.querySelector(`[data-key-clear="${provider}"]`)?.addEventListener("click", async () => {
+      const confirmed = await confirmDialog({
+        title: "Schlüssel entfernen?",
+        message: "Die Handschrifterkennung ist danach aus, bis ein neuer Schlüssel gespeichert wird. Tippen funktioniert weiterhin.",
+        confirmLabel: "Entfernen",
+        danger: true,
+      });
+      if (!confirmed) return;
+      await clearApiKey(provider);
+      await hydrateProviderConfig(panel);
+      showToast("API-Schlüssel entfernt.", { iconName: "trash" });
+    });
+
+    panel.querySelector(`[data-key-test="${provider}"]`)?.addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      const original = button.innerHTML;
+      button.disabled = true;
+      button.innerHTML = `${icon("refresh")} Prüfe …`;
+      const status = panel.querySelector(`[data-key-status="${provider}"]`);
+      const model =
+        panel.querySelector('[data-model-input="gemini"]')?.value.trim() ||
+        learner.getSettings().handwritingModel;
+      try {
+        const message = await testCloudProvider(provider, { model });
+        showToast(message, { type: "success", iconName: "check" });
+        if (status) {
+          status.textContent = message;
+          status.classList.add("is-ok");
+        }
+      } catch (error) {
+        const message = error?.message || "Der Verbindungstest ist fehlgeschlagen.";
+        showToast(message, { type: "warn", iconName: "info" });
+        if (status) {
+          status.textContent = message;
+          status.classList.remove("is-ok");
+        }
+      } finally {
+        if (button.isConnected) {
+          button.disabled = false;
+          button.innerHTML = original;
+        }
+      }
+    });
+
+    panel.querySelector('[data-model-input="gemini"]')?.addEventListener("change", async (event) => {
+      const value = event.target.value.trim() || "gemini-3.5-flash-lite";
+      event.target.value = value;
+      await learner.updateSettings({ handwritingModel: value });
+      showToast("Modell gespeichert.", { iconName: "check" });
+    });
+  }
+
   function renderSettings(panel) {
     const settings = learner.getSettings();
     const consent = learner.getConsent();
     const level = learner.getLevelInfo();
     const lib = library.getLibrary();
     const stand = isStandalone();
+    const providerId = settings.handwritingProvider || "google-input-tools";
+    const providerLabel = PROVIDER_INFO[providerId]?.label || "Google Input Tools";
+    const providerOptions = ["google-input-tools", "google-vision", "gemini", "off"]
+      .map((id) => `<option value="${id}" ${id === providerId ? "selected" : ""}>${esc(PROVIDER_INFO[id].label)}</option>`)
+      .join("");
+    const handwritingSentence =
+      providerId === "off" || settings.handwriting === false
+        ? "Handschrift ist aus – es werden keine Schreibbilder gesendet."
+        : `Schreibbilder gehen an ${esc(providerLabel)}.`;
 
     panel.innerHTML = `
       <div class="stack">
@@ -1594,7 +1815,7 @@ export function renderParent(main) {
             <div class="setting-row">
               <div class="setting-text">
                 <strong>Handschrifterkennung</strong>
-                <small>Wenn aus, lernen Kinder nur mit Tastatur. Die Striche würden sonst an Google Input Tools gesendet.</small>
+                <small>Wenn aus, lernen Kinder nur mit Tastatur. Sonst geht ein Bild der Schrift an den unten gewählten Dienst.</small>
               </div>
               <label class="switch">
                 <input type="checkbox" id="set-handwriting" ${settings.handwriting !== false ? "checked" : ""} aria-label="Handschrifterkennung">
@@ -1618,6 +1839,23 @@ export function renderParent(main) {
         </div>
 
         <div class="panel">
+          <div class="panel-head"><div><h2>Handschrift-Erkennung</h2><p>Welcher Dienst liest die Schrift?</p></div></div>
+          <div class="settings-list">
+            <div class="setting-row">
+              <div class="setting-text">
+                <strong>Anbieter</strong>
+                <small>Gilt ab der nächsten Antwort. „Aus“ bedeutet: nur Tippen.</small>
+              </div>
+              <label class="sr-only" for="set-handwriting-provider">Handschrift-Anbieter</label>
+              <select class="select" id="set-handwriting-provider" style="max-width:260px">
+                ${providerOptions}
+              </select>
+            </div>
+          </div>
+          ${providerConfigMarkup(settings)}
+        </div>
+
+        <div class="panel">
           <div class="panel-head"><div><h2>Datenschutz &amp; Einwilligung</h2><p>Mikrofon und Handschrift sind Online-Funktionen.</p></div></div>
           <div class="callout ${consent?.allowOnline ? "success" : "warn"}">
             ${icon(consent?.allowOnline ? "check" : "info")}
@@ -1625,8 +1863,8 @@ export function renderParent(main) {
               <p class="mb-1"><strong>${consent?.allowOnline ? "Online-Funktionen sind erlaubt." : "Online-Funktionen sind aus."}</strong></p>
               <p class="mb-0">${
                 consent?.allowOnline
-                  ? "Sprachaufnahmen gehen an den Spracherkennungsdienst des Browsers, Schreibstriche an Google Input Tools. SpeakUp speichert beides nicht."
-                  : "Dein Kind lernt mit Tippen und Vorlesen. Es werden keine Sprachaufnahmen oder Schreibstriche gesendet."
+                  ? `Sprachaufnahmen gehen an den Spracherkennungsdienst des Browsers. ${handwritingSentence} SpeakUp speichert nichts davon.`
+                  : "Dein Kind lernt mit Tippen und Vorlesen. Es werden keine Sprachaufnahmen oder Schreibbilder gesendet."
               }</p>
             </div>
           </div>
@@ -1689,9 +1927,16 @@ export function renderParent(main) {
     });
 
     panel.querySelector("#set-handwriting")?.addEventListener("change", async (event) => {
-      await learner.updateSettings({ handwriting: event.target.checked });
+      const enabled = event.target.checked;
+      const patch = { handwriting: enabled };
+      // „Aus“ beim Anbieter würde das Einschalten sonst wirkungslos machen.
+      if (enabled && learner.getSettings().handwritingProvider === "off") {
+        patch.handwritingProvider = "google-input-tools";
+      }
+      await learner.updateSettings(patch);
+      if (patch.handwritingProvider) renderPanel();
       showToast(
-        event.target.checked
+        enabled
           ? "Handschrifterkennung ist an."
           : "Handschrifterkennung ist aus – es wird getippt.",
         { iconName: "pencil" }
@@ -1750,6 +1995,9 @@ export function renderParent(main) {
         })
         .catch(() => {});
     }
+
+    bindProviderConfig(panel);
+    void hydrateProviderConfig(panel);
   }
 
   /* ---------- Start ---------- */
