@@ -92,8 +92,9 @@ export function renderAbout(main) {
               <p>Sprachaufnahmen gehen zur Erkennung an den Dienst deines Browsers
               (bei Chrome z. B. Google). Schreibstriche werden als Bild an den
               eingestellten Dienst geschickt (Standard: Google Input Tools,
-              optional Google Cloud Vision oder Gemini).
-              ${esc(APP_NAME)} speichert beides nicht. Ohne Erlaubnis lernst du mit Tippen.</p>
+              optional Google Cloud Vision oder Gemini). Ein Foto für den
+              Vokabel-Import wird nur zum Lesen gesendet und nicht gespeichert.
+              ${esc(APP_NAME)} speichert nichts davon dauerhaft. Ohne Erlaubnis lernst du mit Tippen.</p>
             </div>
           </div>
           <div class="about-fact">
@@ -180,8 +181,10 @@ export function renderAbout(main) {
             <summary>Kann ich eigene Vokabeln hinzufügen?</summary>
             <p>Ja. Im Elternbereich lassen sich Wörter und Themen anlegen,
             bearbeiten und sortieren. CSV-Dateien aus Excel oder Google Sheets
-            können mit Vorschau importiert werden. Die Rechenaufgabe am Anfang
-            ist eine Hürde für Kinder, keine Sicherheitsmaßnahme.</p>
+            können mit Vorschau importiert werden. Alternativ ein Foto der
+            Vokabelliste machen – die erkannten Paare werden als Vorschläge
+            angezeigt und können einzeln abgewählt werden. Die Rechenaufgabe am
+            Anfang ist eine Hürde für Kinder, keine Sicherheitsmaßnahme.</p>
           </details>
           <details class="faq-item">
             <summary>Was passiert beim Löschen eines Wortes?</summary>

@@ -36,6 +36,8 @@ export function analyzeVocabulary(text, { themeId = null } = {}) {
     entry.existsByGerman = Boolean(byGerman.get(normalizeKey(entry.de)));
     entry.existsExact = entry.id ? byId.has(entry.id) : false;
     entry.hasErrors = entry.errors.length > 0;
+    // Vorschau-Auswahl: Jede gültige Zeile ist zunächst angehakt.
+    entry.selected = true;
   }
 
   const validEntries = parsed.entries.filter((entry) => !entry.hasErrors);
@@ -69,7 +71,7 @@ export async function applyVocabularyImport(analysis, { mode = "merge", themeId 
     throw new Error("Der Import ist noch nicht möglich. Bitte behebe zuerst die Fehler in der Datei.");
   }
   const rows = analysis.entries
-    .filter((entry) => !entry.errors.length)
+    .filter((entry) => !entry.errors.length && entry.selected !== false)
     .map((entry) => ({
       de: entry.de,
       en: entry.en,

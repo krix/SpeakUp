@@ -36,6 +36,12 @@ import { showConsentModal } from "./onboarding.js";
 import { canInstall, promptInstall, installHint, isStandalone } from "../core/install.js";
 import { PROVIDER_INFO, isCloudProvider, testCloudProvider } from "../core/handwriting-cloud.js";
 import { getApiKey, setApiKey, clearApiKey } from "../core/secrets.js";
+import {
+  extractVocabularyFromPhoto,
+  pairsToCsv,
+  photoProviderLabel,
+  resolvePhotoProvider,
+} from "../core/photo-import.js";
 
 const TABS = [
   { id: "words", label: "Wörter", iconName: "pencil" },
@@ -66,6 +72,18 @@ function makeGateTask() {
   return { a, b, answer: a * b };
 }
 
+function freshPhotoState() {
+  return {
+    busy: false,
+    error: "",
+    dataUrl: "",
+    fileName: "",
+    rawText: "",
+    pairs: [],
+    provider: "",
+  };
+}
+
 function freshImportState(target) {
   return {
     source: "file",
@@ -78,6 +96,7 @@ function freshImportState(target) {
     newEmoji: "📘",
     busy: false,
     error: "",
+    photo: freshPhotoState(),
   };
 }
 
@@ -728,6 +747,7 @@ export function renderParent(main) {
 
   function renderImport(panel) {
     const imp = state.import;
+    const photo = imp.photo;
     const themes = library.getThemes();
     if (!imp.target) imp.target = themes[0]?.id || "__new__";
     if (!themes.some((theme) => theme.id === imp.target) && imp.target !== "__new__") {
@@ -735,10 +755,13 @@ export function renderParent(main) {
     }
     const analysis = imp.analysis;
     const targetIsNew = imp.target === "__new__";
+    const selectedCount = analysis
+      ? analysis.entries.filter((entry) => !entry.errors.length && entry.selected !== false).length
+      : 0;
 
     const previewRows = analysis
       ? analysis.entries.slice(0, 100)
-          .map((entry) => {
+          .map((entry, index) => {
             const status = entry.errors.length
               ? `<span class="row-status err">Fehler</span>`
               : entry.duplicateInFile
@@ -748,6 +771,15 @@ export function renderParent(main) {
                   : `<span class="row-status ok">neu</span>`;
             return `
               <tr>
+                <td class="select-col">
+                  <label class="row-check">
+                    <input type="checkbox" data-row-select="${index}"
+                           ${!entry.errors.length && entry.selected !== false ? "checked" : ""}
+                           ${entry.errors.length ? "disabled" : ""}
+                           aria-label="Zeile ${entry.line}: ${esc(entry.de)} importieren">
+                    <span class="box"></span>
+                  </label>
+                </td>
                 <td>${entry.line}</td>
                 <td>${status}</td>
                 <td class="row-${entry.errors.length ? "error" : entry.warnings.length ? "warn" : ""}">${esc(entry.de)}</td>
@@ -771,6 +803,7 @@ export function renderParent(main) {
 
         <div class="import-tabs" role="tablist" aria-label="Import-Quelle">
           ${[
+            ["photo", "Foto", "camera"],
             ["file", "Datei", "download"],
             ["paste", "Einfügen", "pencil"],
             ["url", "URL", "cloud"],
@@ -785,7 +818,44 @@ export function renderParent(main) {
 
         <div class="import-source">
           ${
-            imp.source === "file"
+            imp.source === "photo"
+              ? `
+              <div class="photo-import">
+                <div class="callout" id="photo-provider-status" role="status">
+                  ${icon("refresh")}
+                  <p class="mb-0">Dienst wird geprüft …</p>
+                </div>
+
+                <label class="dropzone photo-dropzone" for="photo-file" tabindex="0">
+                  ${icon("camera")}
+                  <span>${photo.dataUrl ? "Anderes Foto wählen" : "Foto der Vokabelliste aufnehmen oder auswählen"}</span>
+                  <span class="tiny">JPG oder PNG · wird vor dem Senden verkleinert</span>
+                  ${photo.fileName ? `<span class="file-name">${esc(photo.fileName)}</span>` : ""}
+                </label>
+                <input type="file" id="photo-file" accept="image/*" class="sr-only">
+
+                ${photo.busy ? `<div class="callout" role="status">${icon("refresh")}<p class="mb-0">Foto wird gelesen … das kann ein paar Sekunden dauern.</p></div>` : ""}
+                ${photo.error ? `<div class="callout danger">${icon("info")}<p class="mb-0">${esc(photo.error)}</p></div>` : ""}
+
+                ${photo.dataUrl ? `<img class="photo-preview" src="${photo.dataUrl}" alt="Vorschau des ausgewählten Fotos">` : ""}
+
+                ${
+                  photo.pairs.length
+                    ? `<div class="photo-summary">
+                         <span class="preview-stat ok">${photo.pairs.length} ${photo.pairs.length === 1 ? "Vorschlag" : "Vorschläge"}</span>
+                         <button type="button" class="btn btn-ghost btn-small" data-action="swap-photo">${icon("refresh")} Richtung tauschen</button>
+                       </div>`
+                    : ""
+                }
+
+                ${photo.rawText ? `<details class="provider-help"><summary>Erkannten Text anzeigen</summary><pre class="ocr-text">${esc(photo.rawText)}</pre></details>` : ""}
+
+                <div class="btn-row">
+                  <button type="button" class="btn btn-ghost btn-small" data-action="photo-settings">${icon("lock")} Dienst einrichten</button>
+                </div>
+                <p class="tiny muted mb-0">Tipp: Liste gerade von oben fotografieren, gute Beleuchtung, eine Seite pro Foto. Prüfe die Vorschläge unten und hake nur an, was stimmt.</p>
+              </div>`
+              : imp.source === "file"
               ? `
               <label class="dropzone" id="csv-dropzone" for="csv-file" tabindex="0">
                 ${icon("upload")}
@@ -822,6 +892,7 @@ export function renderParent(main) {
           <div class="preview-stats">
             <span class="preview-stat">${plural(analysis.counts.total, "Zeile", "Zeilen")}</span>
             <span class="preview-stat ok">${analysis.counts.valid} gültig</span>
+            <span class="preview-stat select-stat" id="import-selected-stat">${selectedCount} ausgewählt</span>
             ${analysis.counts.errors ? `<span class="preview-stat err">${analysis.counts.errors} mit Fehlern</span>` : ""}
             ${analysis.counts.existingRows && !targetIsNew ? `<span class="preview-stat warn">${analysis.counts.existingRows} schon vorhanden</span>` : ""}
             ${analysis.counts.duplicateRows ? `<span class="preview-stat warn">${analysis.counts.duplicateRows} doppelt</span>` : ""}
@@ -846,7 +917,15 @@ export function renderParent(main) {
 
           <div class="preview-table mt-2">
             <table class="data preview">
-              <thead><tr><th>Zeile</th><th>Status</th><th>Deutsch</th><th>Englisch</th><th>Alternativen</th><th>Beispiel</th><th>Emoji</th></tr></thead>
+              <thead><tr>
+                <th class="select-col">
+                  <label class="row-check">
+                    <input type="checkbox" id="import-select-all" ${selectedCount && selectedCount === analysis.counts.valid ? "checked" : ""} aria-label="Alle Zeilen auswählen">
+                    <span class="box"></span>
+                  </label>
+                </th>
+                <th>Zeile</th><th>Status</th><th>Deutsch</th><th>Englisch</th><th>Alternativen</th><th>Beispiel</th><th>Emoji</th>
+              </tr></thead>
               <tbody>${previewRows}</tbody>
             </table>
           </div>
@@ -898,8 +977,8 @@ export function renderParent(main) {
 
           <div class="btn-row">
             <button type="button" class="btn btn-primary" data-action="apply-import"
-                    ${!analysis || analysis.globalErrors.length || !analysis.counts.valid || imp.busy ? "disabled" : ""}>
-              ${icon("check")} ${analysis ? `${analysis.counts.valid} ${analysis.counts.valid === 1 ? "Wort" : "Wörter"} importieren` : "Importieren"}
+                    ${!analysis || analysis.globalErrors.length || !selectedCount || imp.busy ? "disabled" : ""}>
+              ${icon("check")} ${analysis ? `${selectedCount} ${selectedCount === 1 ? "Wort" : "Wörter"} importieren` : "Importieren"}
             </button>
             <button type="button" class="btn btn-ghost" data-action="discard-import">Verwerfen</button>
             <button type="button" class="btn-link" data-action="download-template">${icon("download")} CSV-Vorlage herunterladen</button>
@@ -1001,6 +1080,74 @@ export function renderParent(main) {
       });
     });
 
+    /* Auswahl in der Vorschau */
+    panel.querySelectorAll("[data-row-select]").forEach((checkbox) => {
+      checkbox.addEventListener("change", () => {
+        const entry = state.import.analysis?.entries[Number(checkbox.dataset.rowSelect)];
+        if (!entry) return;
+        entry.selected = checkbox.checked;
+        updateImportSelectionUi(panel);
+      });
+    });
+    panel.querySelector("#import-select-all")?.addEventListener("change", (event) => {
+      const checked = event.target.checked;
+      const analysisNow = state.import.analysis;
+      if (!analysisNow) return;
+      for (const entry of analysisNow.entries) {
+        if (!entry.errors.length) entry.selected = checked;
+      }
+      // Alle Häkchen und Zähler direkt aktualisieren, ohne neu zu rendern.
+      panel.querySelectorAll("[data-row-select]").forEach((box) => {
+        const entry = analysisNow.entries[Number(box.dataset.rowSelect)];
+        if (entry && !entry.errors.length) box.checked = checked;
+      });
+      updateImportSelectionUi(panel);
+    });
+
+    /* Foto */
+    const photoInput = panel.querySelector("#photo-file");
+    const photoDrop = panel.querySelector(".photo-dropzone");
+    photoInput?.addEventListener("change", () => {
+      if (photoInput.files?.[0]) handlePhoto(photoInput.files[0]);
+    });
+    ["dragenter", "dragover"].forEach((type) => {
+      photoDrop?.addEventListener(type, (event) => {
+        event.preventDefault();
+        photoDrop.classList.add("is-drag");
+      });
+    });
+    ["dragleave", "drop"].forEach((type) => {
+      photoDrop?.addEventListener(type, (event) => {
+        event.preventDefault();
+        photoDrop.classList.remove("is-drag");
+      });
+    });
+    photoDrop?.addEventListener("drop", (event) => {
+      const file = event.dataTransfer?.files?.[0];
+      if (file) handlePhoto(file);
+    });
+    photoDrop?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        photoInput?.click();
+      }
+    });
+    panel.querySelector('[data-action="swap-photo"]')?.addEventListener("click", () => {
+      const pairs = state.import.photo.pairs;
+      state.import.photo.pairs = pairs.map(({ de, en }) => ({ de: en, en: de }));
+      state.import.photo.rawText = state.import.photo.pairs
+        .map((pair) => `${pair.de} – ${pair.en}`)
+        .join("\n");
+      if (state.import.photo.pairs.length) applyPhotoPairs();
+      renderPanel();
+    });
+    panel.querySelector('[data-action="photo-settings"]')?.addEventListener("click", () => {
+      state.tab = "settings";
+      renderPanel();
+      showToast("API-Schlüssel lassen sich unter „Einstellungen“ eintragen.", { type: "info", iconName: "lock" });
+    });
+    if (imp.source === "photo") hydratePhotoProvider(panel);
+
     /* Aktionen */
     panel.querySelector('[data-action="apply-import"]')?.addEventListener("click", () => applyImport());
     panel.querySelector('[data-action="discard-import"]')?.addEventListener("click", () => {
@@ -1040,6 +1187,114 @@ export function renderParent(main) {
     } catch (error) {
       imp.error = error.message || "Die Datei konnte nicht gelesen werden.";
     }
+  }
+
+  /** Zähler und Import-Button an die aktuelle Zeilenauswahl anpassen. */
+  function updateImportSelectionUi(panel) {
+    const imp = state.import;
+    const analysis = imp.analysis;
+    if (!analysis) return;
+
+    const selectedCount = analysis.entries.filter(
+      (entry) => !entry.errors.length && entry.selected !== false
+    ).length;
+
+    const stat = panel.querySelector("#import-selected-stat");
+    if (stat) stat.textContent = `${selectedCount} ausgewählt`;
+
+    const button = panel.querySelector('[data-action="apply-import"]');
+    if (button) {
+      button.disabled = !selectedCount || imp.busy || analysis.globalErrors.length > 0;
+      button.innerHTML = `${icon("check")} ${selectedCount} ${
+        selectedCount === 1 ? "Wort" : "Wörter"
+      } importieren`;
+    }
+
+    const validCount = analysis.entries.filter((entry) => !entry.errors.length).length;
+    const all = panel.querySelector("#import-select-all");
+    if (all) {
+      all.checked = selectedCount > 0 && selectedCount === validCount;
+      all.indeterminate = selectedCount > 0 && selectedCount < validCount;
+    }
+  }
+
+  /* ---------- Foto-Import ---------- */
+
+  /** Zeigt an, welcher Dienst das Foto lesen würde (oder dass keiner da ist). */
+  async function hydratePhotoProvider(panel) {
+    const status = panel.querySelector("#photo-provider-status");
+    if (!status) return;
+    try {
+      const providerId = await resolvePhotoProvider(learner.getSettings());
+      state.import.photo.provider = providerId || "";
+      if (!status.isConnected) return;
+      if (providerId) {
+        status.className = "callout";
+        status.innerHTML = `${icon("cloud")}<p class="mb-0">Foto-Erkennung mit <strong>${esc(
+          photoProviderLabel(providerId)
+        )}</strong>. Das Bild wird nur zum Lesen gesendet und nicht gespeichert.</p>`;
+      } else {
+        status.className = "callout warn";
+        status.innerHTML = `${icon("info")}<div><p class="mb-0"><strong>Für Fotos ist noch kein Dienst eingerichtet.</strong></p>
+          <p class="tiny mb-0">Ein Elternteil kann unter „Einstellungen“ einen API-Schlüssel für Google Cloud Vision (empfohlen) oder Gemini eintragen. Alternativ klappt der Import als CSV-Datei.</p></div>`;
+      }
+    } catch (error) {
+      if (!status.isConnected) return;
+      status.className = "callout danger";
+      status.innerHTML = `${icon("info")}<p class="mb-0">${esc(
+        error.message || "Der Dienst konnte nicht geprüft werden."
+      )}</p>`;
+    }
+  }
+
+  /** Foto lesen, Vorschläge erzeugen und als CSV in die vorhandene Vorschau geben. */
+  async function handlePhoto(file) {
+    const photo = state.import.photo;
+    if (photo.busy) return;
+    photo.busy = true;
+    photo.error = "";
+    photo.dataUrl = "";
+    photo.rawText = "";
+    photo.pairs = [];
+    photo.fileName = file?.name || "Foto";
+    state.import.analysis = null;
+    state.import.text = "";
+    state.import.error = "";
+    renderPanel();
+
+    try {
+      const settings = learner.getSettings();
+      const provider = await resolvePhotoProvider(settings);
+      if (!provider) {
+        throw new Error(
+          "Es ist kein Dienst für Fotos eingerichtet. Ein Elternteil kann unter „Einstellungen“ einen Schlüssel für Google Cloud Vision oder Gemini eintragen."
+        );
+      }
+      const result = await extractVocabularyFromPhoto(file, {
+        provider,
+        model: settings.handwritingModel,
+      });
+      photo.provider = provider;
+      photo.dataUrl = result.image.dataUrl;
+      photo.rawText = result.rawText;
+      photo.pairs = result.pairs;
+      applyPhotoPairs();
+    } catch (error) {
+      photo.error = error.message || "Das Foto konnte nicht gelesen werden.";
+    } finally {
+      photo.busy = false;
+      renderPanel();
+    }
+  }
+
+  /** Übernimmt die aktuellen Foto-Vorschläge in den CSV-Prüfablauf. */
+  function applyPhotoPairs() {
+    const imp = state.import;
+    const pairs = imp.photo.pairs;
+    if (!pairs.length) return;
+    imp.text = pairsToCsv(pairs);
+    imp.fileName = imp.photo.fileName || "Foto";
+    analyzeImport();
   }
 
   async function applyImport() {
@@ -1590,10 +1845,10 @@ export function renderParent(main) {
     const info = PROVIDER_INFO[provider] || {};
     const id = isVision ? "google-vision" : "gemini";
     const intro = isVision
-      ? `<p class="mb-1"><strong>Sehr genaue Handschrift-OCR.</strong></p>
-         <p class="mb-0 small">Ein Bild der Schrift geht an Google Cloud Vision. 1.000 Einheiten pro Monat sind kostenlos; erst danach wird es kostenpflichtig – vorausgesetzt, im Google-Projekt ist ein Abrechnungskonto hinterlegt.</p>`
+      ? `<p class="mb-1"><strong>Sehr genaue Handschrift- und Foto-Erkennung.</strong></p>
+         <p class="mb-0 small">Ein Bild der Schrift oder ein Foto einer Vokabelliste geht an Google Cloud Vision. 1.000 Einheiten pro Monat sind kostenlos; erst danach wird es kostenpflichtig – vorausgesetzt, im Google-Projekt ist ein Abrechnungskonto hinterlegt. Fotos werden nicht gespeichert.</p>`
       : `<p class="mb-1"><strong>KI-Transkription mit kostenlosem Kontingent.</strong></p>
-         <p class="mb-0 small">Ein Bild der Schrift geht an Google Gemini. Im kostenlosen Tarif darf Google die Inhalte zum Verbessern der Produkte verwenden – hier sind das nur einzelne Vokabel-Bilder. Ein KI-Modell kann sich außerdem verlesen.</p>`;
+         <p class="mb-0 small">Ein Bild der Schrift oder ein Foto einer Vokabelliste geht an Google Gemini. Im kostenlosen Tarif darf Google die Inhalte zum Verbessern der Produkte verwenden – hier sind das nur einzelne Vokabel-Bilder. Ein KI-Modell kann sich außerdem verlesen. Fotos werden nicht gespeichert.</p>`;
 
     return `
       <div class="provider-config">
@@ -1856,15 +2111,15 @@ export function renderParent(main) {
         </div>
 
         <div class="panel">
-          <div class="panel-head"><div><h2>Datenschutz &amp; Einwilligung</h2><p>Mikrofon und Handschrift sind Online-Funktionen.</p></div></div>
+          <div class="panel-head"><div><h2>Datenschutz &amp; Einwilligung</h2><p>Mikrofon, Handschrift und Foto-Import sind Online-Funktionen.</p></div></div>
           <div class="callout ${consent?.allowOnline ? "success" : "warn"}">
             ${icon(consent?.allowOnline ? "check" : "info")}
             <div>
               <p class="mb-1"><strong>${consent?.allowOnline ? "Online-Funktionen sind erlaubt." : "Online-Funktionen sind aus."}</strong></p>
               <p class="mb-0">${
                 consent?.allowOnline
-                  ? `Sprachaufnahmen gehen an den Spracherkennungsdienst des Browsers. ${handwritingSentence} SpeakUp speichert nichts davon.`
-                  : "Dein Kind lernt mit Tippen und Vorlesen. Es werden keine Sprachaufnahmen oder Schreibbilder gesendet."
+                  ? `Sprachaufnahmen gehen an den Spracherkennungsdienst des Browsers. ${handwritingSentence} Fotos für den Vokabel-Import werden nur zum Lesen gesendet. SpeakUp speichert nichts davon.`
+                  : "Dein Kind lernt mit Tippen und Vorlesen. Es werden keine Sprachaufnahmen, Schreibbilder oder Fotos gesendet."
               }</p>
             </div>
           </div>

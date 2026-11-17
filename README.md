@@ -55,6 +55,7 @@ Sprechen, hören, mit dem Stift schreiben oder tippen: SpeakUp kombiniert vier L
 - **Elternbereich** hinter einer Rechenaufgabe (Hürde für Kinder, keine Sicherheitsmaßnahme).
 - Wörter und Themen anlegen, bearbeiten, sortieren und löschen.
 - CSV-Import aus Datei, Zwischenablage oder URL – mit Vorschau, Validierung und den Modi **Hinzufügen**, **Zusammenführen** und **Ersetzen**.
+- **Foto-Import:** Vokabelliste fotografieren, erkannte Paare prüfen, einzelne Zeilen abwählen und importieren.
 - CSV-Export pro Thema, JSON-Backup und Wiederherstellung.
 - Statistik pro Wort, Leitner-Boxen, Rundenverlauf, Fortschritt zurücksetzen.
 - Standardlisten wiederherstellen, ohne eigene Wörter oder Fortschritte zu verlieren, solange die Wort-IDs gleich bleiben.
@@ -127,6 +128,7 @@ SpeakUp/
 │  │  ├─ install.js        PWA-Installationslogik
 │  │  ├─ learner.js        Leitner, Punkte, Level, Abzeichen, Profil
 │  │  ├─ library.js        Themen/Wörter, Import, Merge, Tombstones
+│  │  ├─ photo-import.js   Foto → OCR → Vokabelvorschläge
 │  │  ├─ secrets.js        lokale API-Schlüssel (nie im Backup)
 │  │  ├─ speech.js         Web-Speech-Erkennung
 │  │  ├─ transfer.js       Import, Export, Backup, Restore
@@ -259,6 +261,16 @@ Alternativ direkt per URL importieren:
 
 Der Server muss den Zugriff per CORS erlauben. Öffentliche Google-Sheets-Exportlinks tun das in der Regel; ein Link auf die normale Bearbeitungsansicht funktioniert nicht. Wenn der Import scheitert, die Datei herunterladen und über **Datei** importieren.
 
+### Foto einer Vokabelliste importieren
+
+1. Im Elternbereich **Import → Foto** wählen.
+2. Die Vokabelliste gerade von oben fotografieren oder ein vorhandenes Foto auswählen.
+3. SpeakUp verkleinert das Bild im Browser (lange Kante höchstens 1800 px) und liest es über den eingerichteten Dienst.
+4. Die erkannten Paare erscheinen als Vorschläge in der Vorschau. Jede Zeile hat ein Häkchen; abwählen, was nicht stimmen soll, und die Richtung mit **Richtung tauschen** umdrehen, falls die Liste Englisch–Deutsch steht.
+5. Zielthema und Importmodus wählen und **importieren**.
+
+Der Foto-Import nutzt denselben Dienst wie die Handschrifterkennung: Google Cloud Vision (empfohlen, 1.000 Einheiten/Monat kostenlos) oder Gemini. Ist dort nichts eingerichtet, verweist der Bereich auf **Einstellungen**. Das Foto wird nicht dauerhaft gespeichert und nur einmal zum Lesen gesendet. Für beste Ergebnisse: gute Beleuchtung, keine schrägen Seiten, deutsch und englisch in derselben Zeile.
+
 ### Import-Modi
 
 | Modus | Verhalten |
@@ -279,7 +291,7 @@ Der Elternbereich ist über eine zweistellige Multiplikationsaufgabe geschützt.
 |---|---|
 | **Wörter** | Thema wählen, suchen, Wörter anlegen/bearbeiten/löschen, nach oben/unten verschieben, A–Z oder Z–A sortieren. |
 | **Themen** | Themen anlegen/bearbeiten/löschen, Reihenfolge ändern, Punkte-Sperre setzen, A–Z sortieren, CSV exportieren. |
-| **Import** | CSV aus Datei, Einfügen oder URL; Vorschau; Zielthema oder neues Thema; Importmodus. |
+| **Import** | CSV aus Datei, Einfügen oder URL; **Foto-Import** mit Vorschlägen und Auswahl; Vorschau; Zielthema oder neues Thema; Importmodus. |
 | **Sichern** | JSON-Backup erstellen/wiederherstellen, CSV pro Thema exportieren, leere Vorlage laden, Standardlisten wiederherstellen, Fortschritt oder alle Daten löschen. |
 | **Fortschritt** | Statistik pro Wort, Sortierung nach Fehlern/Box/Quote, Box-Verteilung, Rundenverlauf, Fortschritt einzelner Wörter löschen. |
 | **Einstellungen** | Toneffekte, automatisches Vorlesen, Handschrift-Anbieter inkl. API-Schlüssel, Vorlese-Geschwindigkeit, Online-Einwilligung, Installation, Speicherbelegung. |
@@ -444,6 +456,7 @@ Handschrift im Elternbereich auf **Aus** stellen: Kinder tippen dann. Für einen
 - Lernstände, eigene Wörter und Einstellungen bleiben in IndexedDB auf dem Gerät (Fallback: localStorage).
 - **Spracherkennung:** Die Web Speech API sendet die Aufnahme an den Erkennungsdienst des Browser-Herstellers (bei Chrome typischerweise Google). SpeakUp speichert keine Audiodaten.
 - **Handschrift:** Die Striche werden lokal als PNG gerendert und an den im Elternbereich gewählten Dienst gesendet (Standard: Google Input Tools; optional Google Cloud Vision oder Gemini). SpeakUp speichert das Bild nicht. Ohne Einwilligung oder bei „Aus“ wird nichts gesendet.
+- **Foto-Import:** Das Foto wird im Browser verkleinert und einmalig an Google Cloud Vision oder Gemini gesendet. Es wird weder in der App noch im Backup gespeichert. Die Vorschläge bleiben nur im Arbeitsspeicher, bis der Elternbereich verlassen oder der Import verworfen wird. Bei Gemini im kostenlosen Tarif darf Google die eingesendeten Bilder zum Produkttraining verwenden.
 - **Vorlesen:** `SpeechSynthesis` nutzt die Stimmen des Geräts. Wenn eine lokale englische Stimme vorhanden ist, werden keine Daten gesendet.
 - **URL-Import:** Die eingegebene CSV-URL wird direkt vom Browser geladen. Dabei werden keine Daten an Dritte außer dem gewählten Server übertragen.
 - Die Einwilligung ist freiwillig. Ohne sie lernt das Kind ausschließlich mit Tippen und Vorlesen.
@@ -460,7 +473,8 @@ Handschrift im Elternbereich auf **Aus** stellen: Kinder tippen dann. Für einen
 - **Sprachausgabe:** Die Qualität hängt von den installierten Stimmen ab. Fehlt eine englische Stimme, klingt die Aussprache deutsch. Auf iOS muss die Ausgabe teilweise durch eine Nutzergeste freigeschaltet werden.
 - **Offline:** Der erste Start muss online erfolgen, damit App-Shell und Vokabeln geladen werden können. Danach funktioniert die App offline. Spracherkennung und Handschrift benötigen weiterhin Internet.
 - **Keine Synchronisierung:** Daten liegen nur auf einem Gerät/Browser. Umzug nur über Backup-Datei.
-- **CSV:** Kein Import von Bildern oder Audio. Excel kann Emojis oder Sonderzeichen je nach Version verändern; UTF-8 wählen.
+- **CSV:** Kein Import von Audio. Excel kann Emojis oder Sonderzeichen je nach Version verändern; UTF-8 wählen.
+- **Foto-Import:** Braucht Internet und einen eingerichteten Cloud-Schlüssel. Handschriftliche Listen und schräge Fotos werden schlechter erkannt als gedruckte, gerade Seiten. Erkannte Paare sind Vorschläge und müssen vor dem Import geprüft werden; die App übersetzt oder ergänzt keine fehlenden Wörter.
 - **URL-Import:** Unterliegt CORS. Viele Cloud-Links funktionieren nicht direkt.
 - **Elternbereich:** Rechenaufgabe ist kein Sicherheitsmerkmal.
 - **Barrierefreiheit:** Viel Wert auf Tastatur, Fokusführung, ARIA und reduzierte Bewegung gelegt, aber nicht vollständig auditierte WCAG-Konformität. Rückmeldungen willkommen.

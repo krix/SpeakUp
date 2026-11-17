@@ -48,6 +48,7 @@ export function showConsentModal({ firstRun = false, onDone = null } = {}) {
     <p class="small muted mb-0">
       Du kannst auch <strong>ohne Mikrofon und ohne Handschrift-Erkennung</strong> üben und stattdessen tippen.
       Eltern können das jederzeit im Elternbereich ändern – dort steht auch, wie man die Erlaubnis widerruft.
+      Fotos für den Vokabel-Import werden ebenfalls nur zum Lesen gesendet und nicht gespeichert.
       ${status ? `<br><span class="mt-1" style="display:inline-block">${status}</span>` : ""}
     </p>
   `;

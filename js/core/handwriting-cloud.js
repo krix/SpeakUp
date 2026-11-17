@@ -188,7 +188,11 @@ function ensureOnline() {
   }
 }
 
-function apiError(status, data) {
+/**
+ * Übersetzt HTTP-Fehler in verständliche Meldungen.
+ * Wird auch vom Foto-Import (photo-import.js) genutzt.
+ */
+export function apiError(status, data) {
   const apiMessage =
     data?.error?.message ||
     data?.responses?.[0]?.error?.message ||
@@ -218,7 +222,8 @@ function apiError(status, data) {
   );
 }
 
-async function requestJson(url, { method = "POST", body = null, timeout = REQUEST_TIMEOUT } = {}) {
+/** Sendet JSON und liefert die Antwort. Wird auch vom Foto-Import genutzt. */
+export async function requestJson(url, { method = "POST", body = null, timeout = REQUEST_TIMEOUT } = {}) {
   ensureOnline();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
