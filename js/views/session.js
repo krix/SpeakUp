@@ -12,7 +12,7 @@
  */
 import * as library from "../core/library.js";
 import * as learner from "../core/learner.js";
-import { checkAnswer } from "../core/answer.js";
+import { checkAnswer, isNearMiss } from "../core/answer.js";
 import { speak, stopSpeaking, unlockTts } from "../core/tts.js";
 import {
   createSpeechRecognizer,
@@ -464,6 +464,7 @@ function runRound(main, config, onRestart) {
             submitAnswer(result.transcript || "", false, {
               source: "speech",
               detected: result.transcript,
+              candidates: alternatives,
             });
           }
         })
@@ -604,6 +605,7 @@ function runRound(main, config, onRestart) {
         submitAnswer(candidates[0] || "", false, {
           source: "handwriting",
           detected: candidates.slice(0, 3).join(", "),
+          candidates,
         });
       }
     } catch (error) {
@@ -638,8 +640,15 @@ function runRound(main, config, onRestart) {
     state.attemptsByWord.set(word.id, previousAttempts + 1);
     state.attempts += 1;
 
+    // Vor dem falschen Versuch sichern: Wird er nachträglich als richtig
+    // gewertet, kann er so vollständig zurückgenommen werden.
+    const previousProgress = correct ? null : structuredClone(learner.getProgress(word.id));
+    const streakBefore = state.streak;
+
     let gained = 0;
     const promote = firstAttempt;
+    let queuedEntry = null;
+    let recordPromise = null;
 
     if (correct) {
       state.correctAttempts += 1;
@@ -653,7 +662,7 @@ function runRound(main, config, onRestart) {
         gained = POINTS_RETRY;
       }
       state.points += gained;
-      learner.recordAttempt(word.id, true, { promote }).catch((error) => {
+      recordPromise = learner.recordAttempt(word.id, true, { promote }).catch((error) => {
         console.error("[session] Fortschritt konnte nicht gespeichert werden", error);
       });
       sfx.correct();
@@ -663,13 +672,14 @@ function runRound(main, config, onRestart) {
     } else {
       state.streak = 0;
       state.wrongByWord.set(word.id, (state.wrongByWord.get(word.id) || 0) + 1);
-      learner.recordAttempt(word.id, false, { promote: false }).catch((error) => {
+      recordPromise = learner.recordAttempt(word.id, false, { promote: false }).catch((error) => {
         console.error("[session] Fortschritt konnte nicht gespeichert werden", error);
       });
       sfx.wrong();
       // Zweiter Versuch: Wort kommt ans Ende der Runde (begrenzt).
       if (state.wrongByWord.get(word.id) <= 2 && state.queue.length < MAX_QUEUE) {
-        state.queue.push({ word, mode: state.baseMode === "mix" ? null : state.baseMode });
+        queuedEntry = { word, mode: state.baseMode === "mix" ? null : state.baseMode };
+        state.queue.push(queuedEntry);
       }
     }
 
@@ -681,7 +691,105 @@ function runRound(main, config, onRestart) {
       confetti({ count: 60, originY: 0.35 });
     }
 
-    renderFeedback({ word, correct, gained, detected: meta.detected || (meta.source === "typing" ? input : ""), mode: current.mode });
+    // Nur bei maschineller Erkennung und nur, wenn die Abweichung klein
+    // genug für einen Hör-/Lesefehler ist. Beim Tippen entscheidet das Kind
+    // selbst, deshalb gibt es dort keine nachträgliche Wertung.
+    const machineRecognized = meta.source === "speech" || meta.source === "handwriting";
+    const candidates = [input, ...(meta.candidates || [])].filter(
+      (value) => typeof value === "string" && value.trim()
+    );
+    const canAccept =
+      !correct && machineRecognized && candidates.some((candidate) => isNearMiss(candidate, word));
+
+    const acceptance = canAccept
+      ? {
+          word,
+          mode: current.mode,
+          firstAttempt,
+          gained: firstAttempt ? POINTS_FIRST_TRY : POINTS_RETRY,
+          streakBefore,
+          queuedEntry,
+          previousProgress,
+          recordPromise,
+          detected: meta.detected || input,
+        }
+      : null;
+
+    renderFeedback({
+      word,
+      correct,
+      gained,
+      detected: meta.detected || (meta.source === "typing" ? input : ""),
+      mode: current.mode,
+      acceptance,
+    });
+  }
+
+  /**
+   * Nimmt einen falsch gewerteten Erkennungsversuch zurück und speichert ihn
+   * als richtig. Punkte, Serie und Rundenwarteschlange werden mitkorrigiert.
+   */
+  async function acceptAnswer(attempt, card) {
+    if (!attempt || !state.alive) return;
+    if (card?.dataset.accepted === "true") return;
+    if (card) card.dataset.accepted = "true";
+    const button = card?.querySelector('[data-action="accept-correct"]');
+    if (button) button.disabled = true;
+
+    try {
+      // Erst den falschen Versuch abschließen, damit die Reihenfolge in der
+      // lokalen Datenbank eindeutig bleibt.
+      await attempt.recordPromise;
+      await learner.restoreProgress(attempt.word.id, attempt.previousProgress);
+      await learner.recordAttempt(attempt.word.id, true, { promote: attempt.firstAttempt });
+    } catch (error) {
+      console.error("[session] Nachträgliche Wertung fehlgeschlagen", error);
+      showToast("Das konnte gerade nicht gespeichert werden. Versuch es noch einmal.", {
+        type: "error",
+      });
+      if (card) card.dataset.accepted = "false";
+      if (button) button.disabled = false;
+      return;
+    }
+
+    if (!state.alive) return;
+
+    // Den einen falschen Versuch aus der Rundenwertung entfernen.
+    const wrongCount = state.wrongByWord.get(attempt.word.id) || 0;
+    if (wrongCount <= 1) state.wrongByWord.delete(attempt.word.id);
+    else state.wrongByWord.set(attempt.word.id, wrongCount - 1);
+
+    if (attempt.queuedEntry) {
+      const queuedIndex = state.queue.indexOf(attempt.queuedEntry);
+      if (queuedIndex !== -1) state.queue.splice(queuedIndex, 1);
+    }
+
+    state.streak = attempt.streakBefore + 1;
+    state.maxStreak = Math.max(state.maxStreak, state.streak);
+    state.correctAttempts += 1;
+    state.modeCorrect[attempt.mode] = (state.modeCorrect[attempt.mode] || 0) + 1;
+    if (attempt.firstAttempt) state.firstTryCorrect += 1;
+    state.points += attempt.gained;
+    updateProgress();
+
+    sfx.correct();
+    floatPoints(attempt.gained);
+    if (state.streak === 3 || state.streak === 5) {
+      showToast(randomLine(MASCOT_LINES.streak), { type: "success", iconName: "flame" });
+    }
+    if (state.streak === 5 || state.streak === 10) {
+      confetti({ count: 60, originY: 0.35 });
+    }
+
+    card?.remove();
+    renderFeedback({
+      word: attempt.word,
+      correct: true,
+      gained: attempt.gained,
+      detected: attempt.detected,
+      mode: attempt.mode,
+      accepted: true,
+    });
   }
 
   function floatPoints(points) {
@@ -697,11 +805,26 @@ function runRound(main, config, onRestart) {
     setTimeout(() => node.remove(), 1200);
   }
 
-  function renderFeedback({ word, correct, gained, detected, mode }) {
+  function renderFeedback({ word, correct, gained, detected, mode, accepted = false, acceptance = null }) {
     const title = correct ? randomLine(MASCOT_LINES.correct) : randomLine(MASCOT_LINES.wrong);
     const alternatives = (word.alternatives || []).filter(Boolean);
     const alternativesLine = alternatives.length
       ? `<p class="small muted mb-0 mt-1">Auch richtig: ${alternatives.map((alt) => `„${esc(alt)}“`).join(", ")}</p>`
+      : "";
+
+    // Nachträgliche Wertung nur bei Sprach-/Schrifterkennung anbieten.
+    const acceptanceBlock = acceptance
+      ? `
+        <div class="feedback-accept">
+          <p class="small mb-1">Die Erkennung lag vielleicht daneben. War deine Antwort richtig?</p>
+          <button type="button" class="btn btn-soft btn-small" data-action="accept-correct">
+            ${icon("check")} Dennoch als richtig werten
+          </button>
+        </div>`
+      : "";
+
+    const acceptedLine = accepted
+      ? `<p class="feedback-accepted">${icon("check")} Als richtig gewertet</p>`
       : "";
 
     const card = document.createElement("div");
@@ -722,6 +845,8 @@ function runRound(main, config, onRestart) {
         ${word.example ? `<p class="mb-0 mt-2">${icon("speaker")} <em>${esc(word.example)}</em></p>` : ""}
       </div>
       ${detected ? `<p class="detected">Erkannt: „${esc(detected)}“</p>` : ""}
+      ${acceptedLine}
+      ${acceptanceBlock}
       <div class="feedback-actions">
         <button type="button" class="btn btn-soft btn-small" data-action="speak-word">
           ${icon("speaker")} Nochmal hören
@@ -734,6 +859,9 @@ function runRound(main, config, onRestart) {
 
     stage.append(card);
     card.querySelector('[data-action="speak-word"]')?.addEventListener("click", () => speakWord(word.en));
+    card.querySelector('[data-action="accept-correct"]')?.addEventListener("click", () => {
+      acceptAnswer(acceptance, card);
+    });
     card.querySelector('[data-action="show-typing"]')?.addEventListener("click", () => {
       // Nach einer falschen Antwort direkt noch einmal tippen.
       state.answered = false;

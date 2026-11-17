@@ -10,7 +10,7 @@
  * Beim Aktualisieren wird der neue Worker erst nach einer Nutzer-Bestätigung
  * aktiv (SKIP_WAITING). So bleibt eine laufende Lernrunde ununterbrochen.
  */
-const APP_VERSION = "1.2.0";
+const APP_VERSION = "1.3.0";
 const SHELL_CACHE = `speakup-shell-v${APP_VERSION}`;
 const DATA_CACHE = `speakup-data-v${APP_VERSION}`;
 
@@ -19,8 +19,6 @@ const PRECACHE = [
   "./index.html",
   "./manifest.json",
   "./css/app.css",
-  "./assets/logo.svg",
-  "./assets/logo-maskable.svg",
   "./assets/fonts/nunito-latin.woff2",
   "./assets/fonts/nunito-latin-ext.woff2",
   "./icons/favicon-32.png",

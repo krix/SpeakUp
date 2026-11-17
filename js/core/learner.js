@@ -324,6 +324,29 @@ export async function recordAttempt(wordId, correct, { promote = true } = {}) {
   return record;
 }
 
+/**
+ * Stellt einen zuvor gesicherten Fortschritt wieder her.
+ *
+ * Wird verwendet, wenn ein per Sprache oder Handschrift erkannter Fehler
+ * nachträglich als richtig gewertet wird: Der falsche Versuch wird damit
+ * vollständig zurückgenommen, bevor der richtige Versuch gespeichert wird.
+ * So zählt der Versuch nicht doppelt und die Leitner-Box bleibt korrekt.
+ */
+export async function restoreProgress(wordId, snapshot) {
+  if (snapshot && typeof snapshot === "object") {
+    const restored = clone(snapshot);
+    restored.id = wordId;
+    progress.set(wordId, restored);
+    await db.progressPut(restored);
+    bus.emit("progress:change", restored);
+    return restored;
+  }
+  progress.delete(wordId);
+  await db.progressDelete(wordId);
+  bus.emit("progress:change", null);
+  return null;
+}
+
 /** Fortschritt nach einer Wortänderung auf die neue ID übertragen. */
 export async function migrateProgress(oldId, newId) {
   if (!oldId || !newId || oldId === newId) return null;

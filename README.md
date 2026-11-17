@@ -38,6 +38,7 @@ Sprechen, hören, mit dem Stift schreiben oder tippen: SpeakUp kombiniert vier L
   - **Mix** – die Modi wechseln innerhalb einer Runde.
 - **Zehn Wörter pro Runde.** Falsche Wörter kommen ans Ende der Runde und werden ein zweites Mal geübt.
 - **Tolerante Antwortprüfung:** Groß-/Kleinschreibung, Leerzeichen, Satzzeichen, Umlaute und alternative Lösungen werden berücksichtigt. Kleine Tippfehler werden über eine Ähnlichkeitsprüfung erkannt.
+- **Erkennungsfehler korrigieren:** Wurde ein gesprochenes oder geschriebenes Wort nur teilweise richtig erkannt, bietet die Rückmeldung **„Dennoch als richtig werten“** an. Der falsche Versuch wird dabei vollständig zurückgenommen – Punkte, Serie und Leitner-Box werden so korrigiert, als wäre die Antwort von Anfang an richtig gewesen. Beim Tippen gibt es diese Option nicht.
 - **Leitner-System mit fünf Boxen.** Richtig beantwortete Wörter wandern eine Box weiter, Fehler führen zurück in Box 1. Die Intervalle sind 1, 2, 4, 7 und 14 Tage. Nur der erste Versuch einer Runde verändert die Box.
 - **Sprachausgabe** über `SpeechSynthesis` mit englischer Stimme (`en-GB`/`en-US`), wahlweise langsamer.
 - **Handschrift** über Pointer Events – Stift, Finger und Maus. Palm Rejection, Undo und Löschen sind eingebaut. Die Erkennung ist austauschbar: Google Input Tools (Standard, ohne Einrichtung), Google Cloud Vision oder Gemini (eigener API-Schlüssel im Elternbereich).
@@ -154,10 +155,9 @@ SpeakUp/
 │  ├─ hobbys.csv           20 Wörter
 │  └─ reisen.csv           20 Wörter
 ├─ assets/
-│  ├─ logo.svg
-│  ├─ logo-maskable.svg
+│  ├─ logo.png             Logo-Vorlage für alle App-Icons
 │  └─ fonts/               selbst gehostete Nunito-Dateien
-└─ icons/                  PWA-, Maskable- und Apple-Icons
+└─ icons/                  PWA-, Maskable-, Apple- und UI-Icons
 ```
 
 ### Architektur in Kürze
@@ -469,7 +469,7 @@ Handschrift im Elternbereich auf **Aus** stellen: Kinder tippen dann. Für einen
 
 - **Web Speech API:** Nicht in jedem Browser verfügbar. Firefox unterstützt sie nicht; Safari/iOS nur eingeschränkt und teils mit Siri-/Diktat-Abhängigkeit. Die App fällt auf Tippen zurück.
 - **Mikrofon:** Benötigt eine sichere Umgebung (HTTPS/localhost) und eine Berechtigung. Verweigerte Berechtigungen werden kindgerecht erklärt.
-- **Handschrifterkennung:** Google Input Tools ist ein **nicht offiziell dokumentierter** Dienst. Er kann sich ändern, rate-limitieren oder ausfallen; der öffentliche Endpunkt liefert für viele Eingaben keine brauchbaren Wörter. Deshalb gibt es im Elternbereich zwei optionalen Cloud-Anbieter: **Google Cloud Vision** (1.000 Einheiten/Monat kostenlos, sehr genaue Handschrift-OCR) und **Gemini** (KI mit kostenlosem Kontingent, kann sich verlesen). Beide brauchen einen eigenen API-Schlüssel und Internet. SpeakUp verwirft unbrauchbare Kandidaten, zeigt einen verständlichen Hinweis und bietet sofort das Tippen an. Der Provider ist über `setHandwritingProvider()` austauschbar; ein lokales Modell ist als Ausbau geplant.
+- **Handschrifterkennung:** Google Input Tools ist ein **nicht offiziell dokumentierter** Dienst. Er kann sich ändern, rate-limitieren oder ausfallen; der öffentliche Endpunkt liefert für viele Eingaben keine brauchbaren Wörter. Deshalb gibt es im Elternbereich zwei optionalen Cloud-Anbieter: **Google Cloud Vision** (1.000 Einheiten/Monat kostenlos, sehr genaue Handschrift-OCR) und **Gemini** (KI mit kostenlosem Kontingent, kann sich verlesen). Beide brauchen einen eigenen API-Schlüssel und Internet. SpeakUp verwirft unbrauchbare Kandidaten, zeigt einen verständlichen Hinweis und bietet sofort das Tippen an. Bei kleinen Erkennungsfehlern kann die Antwort außerdem manuell als richtig gewertet werden; der vorherige falsche Versuch wird dabei zurückgenommen. Der Provider ist über `setHandwritingProvider()` austauschbar; ein lokales Modell ist als Ausbau geplant.
 - **Sprachausgabe:** Die Qualität hängt von den installierten Stimmen ab. Fehlt eine englische Stimme, klingt die Aussprache deutsch. Auf iOS muss die Ausgabe teilweise durch eine Nutzergeste freigeschaltet werden.
 - **Offline:** Der erste Start muss online erfolgen, damit App-Shell und Vokabeln geladen werden können. Danach funktioniert die App offline. Spracherkennung und Handschrift benötigen weiterhin Internet.
 - **Keine Synchronisierung:** Daten liegen nur auf einem Gerät/Browser. Umzug nur über Backup-Datei.

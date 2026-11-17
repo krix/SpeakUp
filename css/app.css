@@ -586,6 +586,27 @@ main:focus { outline: none; }
 .feedback-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 16px; }
 .feedback-actions .btn-primary { margin-left: auto; }
 .detected { color: var(--c-muted); font-size: .86rem; margin-top: 6px; }
+.feedback-accept {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: rgba(255, 255, 255, .8);
+  border: 1px dashed #E0B4B9;
+}
+.feedback-accept p { color: var(--c-ink-soft); }
+.feedback-accepted {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 6px 12px;
+  border-radius: var(--r-pill);
+  background: #D9F3E4;
+  color: var(--c-green);
+  font-size: .88rem;
+  font-weight: 800;
+}
+.feedback-accepted .icon { width: 18px; height: 18px; }
 .points-float { position: fixed; z-index: 210; font-weight: 900; font-size: 1.5rem; color: var(--c-green); pointer-events: none; animation: float-up 1.1s ease-out forwards; }
 
 /* Ergebnisse */

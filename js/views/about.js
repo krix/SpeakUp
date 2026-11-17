@@ -21,7 +21,7 @@ export function renderAbout(main) {
     <div class="stack-lg about-page">
       <section class="about-hero" aria-labelledby="about-title">
         <div class="about-logo-wrap">
-          <img src="assets/logo.svg" alt="SpeakUp Logo: Sprechblase mit Stift" width="128" height="128" class="about-logo">
+          <img src="icons/icon-512.png" alt="SpeakUp Logo: Sprechblase mit Stift" width="128" height="128" class="about-logo">
         </div>
         <div class="about-hero-copy">
           <span class="hero-kicker">${icon("star")} Speak up!</span>
@@ -161,6 +161,17 @@ export function renderAbout(main) {
             Fehler zeigt SpeakUp einen Hinweis und bietet sofort das Tippen an.
             Schreibe in Druckbuchstaben und prüfe, ob Online-Funktionen erlaubt
             sind. Zum Üben ist Tippen der zuverlässigste Weg.</p>
+          </details>
+          <details class="faq-item">
+            <summary>Die Erkennung hat mein Wort falsch verstanden.</summary>
+            <p>Bei Sprache und Handschrift kann die Erkennung kleine Fehler machen –
+            zum Beispiel ein zusätzliches Komma oder einen Buchstabendreher.
+            Wenn deine Antwort eigentlich richtig war, tippe in der Rückmeldung
+            auf <strong>„Dennoch als richtig werten“</strong>. Der falsche Versuch
+            wird dann zurückgenommen und zählt als richtig. Die Option erscheint
+            nur bei kleinen Abweichungen und nur bei Sprache oder Handschrift,
+            nicht beim Tippen. Bei großen Abweichungen hilft es, deutlich zu
+            sprechen, in Druckbuchstaben zu schreiben oder zu tippen.</p>
           </details>
           <details class="faq-item">
             <summary>Warum klingt die Vorlese-Stimme komisch?</summary>
