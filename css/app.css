@@ -169,6 +169,20 @@ button { cursor: pointer; }
 .points-chip .icon { width: 19px; height: 19px; }
 .points-chip.bump { animation: bump .35s var(--ease-pop); }
 
+/* Profil-Auswahl in der Kopfzeile: auf kleinen Geräten nur das Emoji. */
+.profile-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 44px; max-width: 150px; padding: 0 12px;
+  border: 0; border-radius: var(--r-pill);
+  background: var(--c-primary-soft); color: var(--c-primary);
+  font: inherit; font-weight: 900; font-size: .92rem;
+  white-space: nowrap; cursor: pointer;
+  transition: background .15s ease, transform .15s ease;
+}
+.profile-chip:hover { background: #E3DCFF; }
+.profile-chip:active { transform: scale(.96); }
+.profile-chip-name { display: none; overflow: hidden; text-overflow: ellipsis; }
+
 .icon-btn {
   display: inline-grid; place-items: center;
   width: 48px; height: 48px; flex: none;
@@ -935,6 +949,27 @@ table.preview .select-col { width: 56px; text-align: center; }
 .consent-item p { margin: 0; font-size: .85rem; color: var(--c-ink-soft); }
 .consent-item.green .consent-icon { background: var(--c-green-soft); color: var(--c-green); }
 
+/* Profile im Wechsel-Dialog */
+.profile-switcher-list { display: grid; gap: 8px; }
+.profile-row {
+  display: flex; align-items: center; gap: 10px;
+  min-height: 66px; padding: 8px 10px;
+  border: 1px solid var(--c-line); border-radius: var(--r-md);
+  background: var(--c-surface-2);
+}
+.profile-row.is-active { border-color: var(--c-primary); background: var(--c-primary-soft); }
+.profile-row-emoji { flex: none; width: 38px; text-align: center; font-size: 1.7rem; }
+.profile-row-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.profile-row-text strong { font-size: .95rem; overflow-wrap: anywhere; }
+.profile-row-text small { color: var(--c-muted); font-size: .72rem; }
+.profile-row-actions { display: flex; flex: none; gap: 0; }
+.mini-badge {
+  display: inline-block; margin-left: 4px; padding: 2px 7px;
+  border-radius: var(--r-pill); background: var(--c-primary); color: #fff;
+  font-size: .6rem; font-weight: 900; letter-spacing: .05em; text-transform: uppercase;
+  vertical-align: middle;
+}
+
 .toast-root {
   position: fixed; left: 50%; bottom: calc(var(--nav-h) + 26px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
@@ -1067,6 +1102,7 @@ table.preview .select-col { width: 56px; text-align: center; }
   .mode-check { position: absolute; right: 10px; top: 10px; }
   .field-row { grid-template-columns: 1fr 1fr; }
   .about-grid { grid-template-columns: 1fr 1fr; }
+  .profile-chip-name { display: inline; }
 }
 @media (min-width: 780px) {
   .brand-text small { display: block; }

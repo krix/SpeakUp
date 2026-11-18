@@ -15,6 +15,8 @@
 import * as library from "../core/library.js";
 import * as learner from "../core/learner.js";
 import * as transfer from "../core/transfer.js";
+import * as profiles from "../core/profiles.js";
+import * as drive from "../core/drive.js";
 import db from "../core/db.js";
 import bus from "../core/bus.js";
 import { APP_VERSION, PARENT_SESSION_KEY } from "../core/config.js";
@@ -28,11 +30,14 @@ import {
   formatDuration,
   plural,
   readTextFile,
+  setButtonBusy,
+  errorMessage,
 } from "../ui/dom.js";
 import { sfx, setSfxEnabled } from "../ui/sfx.js";
 import { speak, unlockTts } from "../core/tts.js";
 import { mascot } from "../ui/mascot.js";
 import { showConsentModal } from "./onboarding.js";
+import { openProfileSwitcher, openProfileForm } from "../ui/profile-switcher.js";
 import { canInstall, promptInstall, installHint, isStandalone } from "../core/install.js";
 import { PROVIDER_INFO, isCloudProvider, testCloudProvider } from "../core/handwriting-cloud.js";
 import { getApiKey, setApiKey, clearApiKey } from "../core/secrets.js";
@@ -1362,7 +1367,7 @@ export function renderParent(main) {
           <div class="panel-head">
             <div>
               <h2>Backup erstellen</h2>
-              <p>Eine Datei mit allem: Vokabeln, eigene Themen, Fortschritt und Einstellungen.</p>
+              <p>Eine Datei mit allem: allen Profilen, Vokabeln, eigenen Themen, Fortschritt und Einstellungen.</p>
             </div>
             <button type="button" class="btn btn-small" data-action="download-backup">
               ${icon("download")} ${esc("speakup-backup.json")}
@@ -2026,6 +2031,187 @@ export function renderParent(main) {
     });
   }
 
+  /** Client-ID, Verbindungsstatus und letzte Sicherung im Einstellungsfeld zeigen. */
+  async function hydrateDriveStatus(panel) {
+    if (!alive) return;
+    const status = await drive.getStatus();
+    const input = panel.querySelector("#drive-client-id");
+    if (input && document.activeElement !== input) {
+      input.value = status.configured ? await drive.getClientId() : "";
+    }
+    const line = panel.querySelector("#drive-status");
+    if (!line) return;
+
+    if (!status.configured) {
+      line.textContent = "Noch keine Client-ID gespeichert. Die Cloud-Funktion ist aus.";
+    } else if (!status.connected) {
+      line.textContent = "Client-ID gespeichert. Nicht verbunden – der Token gilt nur für diese Sitzung.";
+    } else if (status.lastSync?.uploadedAt) {
+      line.textContent = `Verbunden. Letzte Sicherung: ${formatDate(new Date(status.lastSync.uploadedAt).getTime())} · ${plural(status.lastSync.profileCount || 0, "Profil", "Profile")}.`;
+    } else {
+      line.textContent = "Verbunden. In dieser Installation wurde noch nicht gesichert.";
+    }
+
+    panel.querySelector('[data-action="drive-connect"]')?.toggleAttribute("disabled", status.connected || !status.configured);
+    panel.querySelector('[data-action="drive-disconnect"]')?.toggleAttribute("disabled", !status.connected);
+    panel.querySelector('[data-action="drive-upload"]')?.toggleAttribute("disabled", !status.connected);
+    panel.querySelector('[data-action="drive-download"]')?.toggleAttribute("disabled", !status.connected);
+  }
+
+  async function withBusy(button, label, task) {
+    setButtonBusy(button, true, label);
+    try {
+      return await task();
+    } finally {
+      setButtonBusy(button, false);
+    }
+  }
+
+  /** Stellt bei Bedarf die Verbindung zu Google Drive wieder her. */
+  async function ensureDrive() {
+    if (!drive.isConnected()) await drive.connect();
+  }
+
+  function bindProfileSettings(panel) {
+    panel.querySelector('[data-action="profile-create"]')?.addEventListener("click", () => {
+      openProfileForm({ mode: "create" });
+    });
+
+    panel.querySelector('[data-action="profile-switcher"]')?.addEventListener("click", () => {
+      openProfileSwitcher();
+    });
+
+    panel.querySelector("#parent-profile-list")?.addEventListener("click", async (event) => {
+      const button = event.target.closest("[data-parent-profile]");
+      if (!button) return;
+      const id = button.dataset.profileId;
+      const profile = profiles.isReady() ? profiles.listProfiles().find((item) => item.id === id) : null;
+      if (!profile) return;
+      const action = button.dataset.parentProfile;
+
+      try {
+        if (action === "activate") {
+          button.disabled = true;
+          await profiles.switchProfile(id);
+          window.location.reload();
+          return;
+        }
+        if (action === "rename") {
+          openProfileForm({ mode: "rename", profile, onDone: () => renderPanel() });
+          return;
+        }
+        if (action === "delete") {
+          const ok = await confirmDialog({
+            title: "Profil löschen?",
+            message: `„${profile.name}“ und alle seine Wörter, Punkte und Fortschritte werden gelöscht. Das lässt sich nicht rückgängig machen.`,
+            confirmLabel: "Profil löschen",
+            danger: true,
+          });
+          if (!ok) return;
+          button.disabled = true;
+          const wasActive = profile.active;
+          await profiles.deleteProfile(id);
+          if (wasActive) {
+            window.location.reload();
+            return;
+          }
+          showToast("Profil gelöscht.", { type: "success", iconName: "check" });
+          renderPanel();
+          return;
+        }
+      } catch (err) {
+        button.disabled = false;
+        showToast(errorMessage(err), { type: "error" });
+      }
+    });
+  }
+
+  function bindDriveSettings(panel) {
+    panel.querySelector('[data-action="drive-save-client"]')?.addEventListener("click", async () => {
+      const value = panel.querySelector("#drive-client-id")?.value.trim() || "";
+      await drive.setClientId(value);
+      showToast(value ? "Client-ID gespeichert." : "Client-ID entfernt.", { type: "success", iconName: "check" });
+      await hydrateDriveStatus(panel);
+    });
+
+    panel.querySelector('[data-action="drive-clear-client"]')?.addEventListener("click", async () => {
+      const ok = await confirmDialog({
+        title: "Client-ID entfernen?",
+        message: "Die Verbindung wird getrennt und die gespeicherte Client-ID gelöscht. Deine lokalen Daten bleiben erhalten.",
+        confirmLabel: "Entfernen",
+        danger: true,
+      });
+      if (!ok) return;
+      drive.disconnect();
+      await drive.setClientId("");
+      showToast("Google-Drive-Einrichtung entfernt.", { iconName: "cloud" });
+      renderPanel();
+    });
+
+    panel.querySelector('[data-action="drive-connect"]')?.addEventListener("click", async (event) => {
+      try {
+        await withBusy(event.currentTarget, "Verbinde …", () => drive.connect());
+        showToast("Mit Google Drive verbunden.", { type: "success", iconName: "cloud" });
+      } catch (err) {
+        showToast(errorMessage(err), { type: "error" });
+      }
+      await hydrateDriveStatus(panel);
+    });
+
+    panel.querySelector('[data-action="drive-disconnect"]')?.addEventListener("click", async () => {
+      drive.disconnect();
+      showToast("Google Drive getrennt.", { iconName: "cloud" });
+      await hydrateDriveStatus(panel);
+    });
+
+    panel.querySelector('[data-action="drive-upload"]')?.addEventListener("click", async (event) => {
+      try {
+        const info = await withBusy(event.currentTarget, "Sichere …", async () => {
+          await ensureDrive();
+          return drive.upload();
+        });
+        showToast(`${plural(info.profileCount, "Profil", "Profile")} in der Cloud gesichert.`, {
+          type: "success",
+          iconName: "check",
+        });
+      } catch (err) {
+        showToast(errorMessage(err), { type: "error" });
+      }
+      await hydrateDriveStatus(panel);
+    });
+
+    panel.querySelector('[data-action="drive-download"]')?.addEventListener("click", async (event) => {
+      try {
+        const remote = await withBusy(event.currentTarget, "Lade …", async () => {
+          await ensureDrive();
+          return drive.download();
+        });
+        if (!remote) {
+          showToast("In der Cloud liegt noch keine SpeakUp-Datei.", { iconName: "cloud" });
+          return;
+        }
+        const count = remote.payload.profiles.length;
+        const stand = remote.file?.modifiedTime ? formatDate(new Date(remote.file.modifiedTime).getTime()) : "unbekannt";
+        const ok = await confirmDialog({
+          title: "Aus Google Drive laden?",
+          message: `Die Cloud enthält ${plural(count, "Profil", "Profile")} (Stand: ${stand}). Profile mit gleicher ID oder gleichem Namen werden überschrieben, neue kommen dazu. Deine lokale Einwilligung bleibt erhalten.`,
+          confirmLabel: "Cloud-Daten laden",
+          danger: true,
+        });
+        if (!ok) return;
+        const result = await drive.applyDownloaded(remote.payload);
+        showToast(`${plural(result.added + result.updated, "Profil", "Profile")} übernommen.`, {
+          type: "success",
+          iconName: "check",
+        });
+        window.location.reload();
+      } catch (err) {
+        showToast(errorMessage(err), { type: "error" });
+      }
+      await hydrateDriveStatus(panel);
+    });
+  }
+
   function renderSettings(panel) {
     const settings = learner.getSettings();
     const consent = learner.getConsent();
@@ -2041,6 +2227,9 @@ export function renderParent(main) {
       providerId === "off" || settings.handwriting === false
         ? "Handschrift ist aus – es werden keine Schreibbilder gesendet."
         : `Schreibbilder gehen an ${esc(providerLabel)}.`;
+    const profileRows = profiles.isReady()
+      ? profiles.listProfiles()
+      : [];
 
     panel.innerHTML = `
       <div class="stack">
@@ -2108,6 +2297,83 @@ export function renderParent(main) {
             </div>
           </div>
           ${providerConfigMarkup(settings)}
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><div><h2>Benutzerprofile</h2><p>Jede Person lernt mit eigener Liste und eigenem Fortschritt.</p></div></div>
+          <div class="profile-switcher-list" id="parent-profile-list">
+            ${
+              profileRows.length
+                ? profileRows
+                    .map(
+                      (profile) => `
+                  <div class="profile-row ${profile.active ? "is-active" : ""}">
+                    <span class="profile-row-emoji" aria-hidden="true">${esc(profile.emoji)}</span>
+                    <div class="profile-row-text">
+                      <strong>${esc(profile.name)}${profile.active ? ' <span class="mini-badge">Aktiv</span>' : ""}</strong>
+                      <small>${plural(profile.wordCount, "Wort", "Wörter")}</small>
+                    </div>
+                    <div class="profile-row-actions">
+                      ${
+                        profile.active
+                          ? ""
+                          : `<button type="button" class="tiny-btn" data-parent-profile="activate" data-profile-id="${esc(profile.id)}" aria-label="${esc(profile.name)} aktivieren" title="Aktivieren">${icon("check")}</button>`
+                      }
+                      <button type="button" class="tiny-btn" data-parent-profile="rename" data-profile-id="${esc(profile.id)}" aria-label="${esc(profile.name)} umbenennen" title="Umbenennen">${icon("pencil")}</button>
+                      ${
+                        profileRows.length > 1
+                          ? `<button type="button" class="tiny-btn" data-parent-profile="delete" data-profile-id="${esc(profile.id)}" aria-label="${esc(profile.name)} löschen" title="Löschen">${icon("trash")}</button>`
+                          : ""
+                      }
+                    </div>
+                  </div>`
+                    )
+                    .join("")
+                : '<p class="small muted mb-0">Profile werden beim Start geladen.</p>'
+            }
+          </div>
+          <div class="btn-row mt-2">
+            <button type="button" class="btn btn-small" data-action="profile-create">${icon("plus")} Neues Profil</button>
+            <button type="button" class="btn btn-ghost btn-small" data-action="profile-switcher">${icon("refresh")} Profil wechseln</button>
+          </div>
+          <p class="tiny muted mt-2 mb-0">Ein Wechsel sichert den aktuellen Stand automatisch. Die Einwilligung für Online-Funktionen gilt je Profil und bleibt auf diesem Gerät.</p>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><div><h2>Google Drive (optional)</h2><p>Vokabellisten und Einstellungen manuell sichern – ohne SpeakUp-Konto.</p></div></div>
+          <div class="callout">
+            ${icon("cloud")}
+            <div>
+              <p class="mb-1"><strong>Nur auf Knopfdruck.</strong> SpeakUp legt eine einzige Datei im versteckten App-Ordner deines Google-Kontos an.</p>
+              <p class="mb-0">Darin liegen alle Profile mit Wörtern, Lernstand und Einstellungen. Einwilligungen, API-Schlüssel und deine Client-ID kommen nicht hinein. Nach dem Neuladen ist die Verbindung kurz getrennt.</p>
+            </div>
+          </div>
+          <div class="field mt-2">
+            <label class="field-label" for="drive-client-id">Eigene Google-OAuth-Client-ID</label>
+            <input class="input" id="drive-client-id" type="text" autocomplete="off" spellcheck="false" placeholder="123456…apps.googleusercontent.com">
+            <p class="hint">Google Cloud Console → API &amp; Dienste → Anmeldedaten → OAuth-Client-ID vom Typ „Webanwendung“. Bei „Autorisierte JavaScript-Ursprünge“ die Adresse dieser Installation eintragen (z. B. <code>http://localhost:8000</code>). Die Drive API muss für das Projekt aktiviert sein.</p>
+          </div>
+          <div class="btn-row mt-2">
+            <button type="button" class="btn btn-small" data-action="drive-save-client">${icon("check")} Client-ID speichern</button>
+            <button type="button" class="btn btn-ghost btn-small" data-action="drive-clear-client">${icon("trash")} Entfernen</button>
+          </div>
+          <p class="tiny muted" id="drive-status" role="status">wird geprüft …</p>
+          <div class="btn-row">
+            <button type="button" class="btn btn-soft btn-small" data-action="drive-connect">${icon("cloud")} Verbinden</button>
+            <button type="button" class="btn btn-ghost btn-small" data-action="drive-disconnect">Trennen</button>
+            <button type="button" class="btn btn-soft btn-small" data-action="drive-upload">${icon("upload")} Jetzt sichern</button>
+            <button type="button" class="btn btn-soft btn-small" data-action="drive-download">${icon("download")} Aus Cloud laden</button>
+          </div>
+          <details class="provider-help mt-2">
+            <summary>Wie richte ich Google Drive ein?</summary>
+            <div class="small">
+              <p>1. In der Google Cloud Console ein Projekt anlegen und die <strong>Google Drive API</strong> aktivieren.</p>
+              <p>2. Prüfen, dass der Zugriff auf <code>drive.appdata</code> für dein Konto zugelassen ist.</p>
+              <p>3. Eine <strong>OAuth-Client-ID für Webanwendungen</strong> erstellen. Als JavaScript-Ursprung genau die Adresse eintragen, unter der SpeakUp läuft (Protokoll, Host und Port müssen stimmen).</p>
+              <p>4. Die ID oben einfügen, speichern und auf „Verbinden“ klicken. Google fragt einmalig nach Konto und Zustimmung.</p>
+              <p class="mb-0">Beim Laden gewinnt die Cloud-Version: Profile mit gleicher ID oder gleichem Namen werden aktualisiert, neue kommen dazu. Deine lokale Einwilligung bleibt erhalten.</p>
+            </div>
+          </details>
         </div>
 
         <div class="panel">
@@ -2253,6 +2519,9 @@ export function renderParent(main) {
 
     bindProviderConfig(panel);
     void hydrateProviderConfig(panel);
+    bindProfileSettings(panel);
+    bindDriveSettings(panel);
+    void hydrateDriveStatus(panel);
   }
 
   /* ---------- Start ---------- */

@@ -4,7 +4,7 @@
  * Bewusste Entscheidungen:
  *   - Schlüssel liegen getrennt von den Einstellungen im kv-Speicher
  *     ("handwritingKeys"). Dadurch landen sie niemals in einem Backup.
- *   - Es gibt keine Synchronisierung und keinen Server von SpeakUp.
+ *   - Es gibt keinen Server und keine automatische Synchronisierung von SpeakUp.
  *   - Ein Schlüssel in einer Browser-App ist für alle lesbar, die Zugriff
  *     auf dieses Gerät haben. Deshalb im Elternbereich klar benennen und
  *     den Schlüssel beim Anbieter einschränken (API + HTTP-Referrer).

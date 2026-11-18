@@ -2,7 +2,7 @@
 
 **Englisch lernen mit Sprache & Stift** – eine kindgerechte, installierbare Web-App für Vokabeln der Klassen 5–6.
 
-Sprechen, hören, mit dem Stift schreiben oder tippen: SpeakUp kombiniert vier Lernmodi mit einem Leitner-Wiederholungssystem, Punkten, Levels, Abzeichen und fünf freischaltbaren Themenwelten. Alles läuft ohne Konto, ohne Werbung und ohne Tracker. Die Lernstände bleiben auf dem Gerät.
+Sprechen, hören, mit dem Stift schreiben oder tippen: SpeakUp kombiniert vier Lernmodi mit einem Leitner-Wiederholungssystem, Punkten, Levels, Abzeichen und fünf freischaltbaren Themenwelten. Alles läuft ohne SpeakUp-Konto, ohne Werbung und ohne Tracker. Mehrere Personen können sich getrennte Profile anlegen; die Lernstände bleiben standardmäßig auf dem Gerät und können optional in den eigenen Google Drive gesichert werden.
 
 > **Motto:** Speak up!
 
@@ -17,13 +17,14 @@ Sprechen, hören, mit dem Stift schreiben oder tippen: SpeakUp kombiniert vier L
 5. [Neue Themen hinzufügen](#neue-themen-hinzufügen)
 6. [Excel & Google Sheets](#excel--google-sheets)
 7. [Elternbereich](#elternbereich)
-8. [Fortschritt, IDs und Backups](#fortschritt-ids-und-backups)
-9. [Installation als App](#installation-als-app)
-10. [Hosting](#hosting)
-11. [Handschrifterkennung: Anbieter einrichten](#handschrifterkennung-anbieter-einrichten)
-12. [Datenschutz](#datenschutz)
-13. [Grenzen und bekannte Einschränkungen](#grenzen-und-bekannte-einschränkungen)
-14. [Nächste Schritte](#nächste-schritte)
+8. [Profile und Google Drive](#profile-und-google-drive)
+9. [Fortschritt, IDs und Backups](#fortschritt-ids-und-backups)
+10. [Installation als App](#installation-als-app)
+11. [Hosting](#hosting)
+12. [Handschrifterkennung: Anbieter einrichten](#handschrifterkennung-anbieter-einrichten)
+13. [Datenschutz](#datenschutz)
+14. [Grenzen und bekannte Einschränkungen](#grenzen-und-bekannte-einschränkungen)
+15. [Nächste Schritte](#nächste-schritte)
 
 ---
 
@@ -53,6 +54,8 @@ Sprechen, hören, mit dem Stift schreiben oder tippen: SpeakUp kombiniert vier L
 
 ### Für Eltern und Lehrkräfte
 
+- **Mehrere Profile:** Jede Person hat eine eigene Vokabelliste, eigene Punkte und einen eigenen Lernstand. Der Wechsel oben in der Kopfzeile sichert automatisch den aktuellen Stand.
+- **Optionaler Google-Drive-Sync:** Alle Profile werden manuell als eine JSON-Datei im versteckten App-Ordner des eigenen Google-Kontos gesichert oder geladen. Dafür wird nur eine selbst erstellte OAuth-Client-ID im Elternbereich eingetragen.
 - **Elternbereich** hinter einer Rechenaufgabe (Hürde für Kinder, keine Sicherheitsmaßnahme).
 - Wörter und Themen anlegen, bearbeiten, sortieren und löschen.
 - CSV-Import aus Datei, Zwischenablage oder URL – mit Vorschau, Validierung und den Modi **Hinzufügen**, **Zusammenführen** und **Ersetzen**.
@@ -123,6 +126,7 @@ SpeakUp/
 │  │  ├─ config.js         App-Name, Version, Dateinamen
 │  │  ├─ csv.js            CSV-Parser und -Serializer
 │  │  ├─ db.js             IndexedDB + localStorage-Fallback
+│  │  ├─ drive.js          optionale Google-Drive-Synchronisierung
 │  │  ├─ handwriting.js    austauschbarer Handschrift-Provider
 │  │  ├─ handwriting-cloud.js  Cloud-Anbieter (Vision, Gemini)
 │  │  ├─ hash.js           stabile Wort-IDs (cyrb53)
@@ -130,6 +134,7 @@ SpeakUp/
 │  │  ├─ learner.js        Leitner, Punkte, Level, Abzeichen, Profil
 │  │  ├─ library.js        Themen/Wörter, Import, Merge, Tombstones
 │  │  ├─ photo-import.js   Foto → OCR → Vokabelvorschläge
+│  │  ├─ profiles.js       mehrere Benutzerprofile mit eigenen Daten
 │  │  ├─ secrets.js        lokale API-Schlüssel (nie im Backup)
 │  │  ├─ speech.js         Web-Speech-Erkennung
 │  │  ├─ transfer.js       Import, Export, Backup, Restore
@@ -139,6 +144,7 @@ SpeakUp/
 │  │  ├─ confetti.js       Konfetti mit Reduced-Motion-Schutz
 │  │  ├─ dom.js            DOM-Helfer, Toasts, Modale
 │  │  ├─ mascot.js         Maskottchen „Pip“
+│  │  ├─ profile-switcher.js  Profil-Dialog und -Formulare
 │  │  └─ sfx.js            WebAudio-Toneffekte
 │  └─ views/
 │     ├─ about.js          „Über SpeakUp“
@@ -162,11 +168,13 @@ SpeakUp/
 
 ### Architektur in Kürze
 
-- **`js/app.js`** ist der einzige Einstiegspunkt. Es initialisiert Datenbank, Profil und Bibliothek und rendert danach die Route.
+- **`js/app.js`** ist der einzige Einstiegspunkt. Es initialisiert Datenbank, Bibliothek und Profile und rendert danach die Route.
 - Der **Hash-Router** kennt `#/home`, `#/lernen`, `#/fortschritt`, `#/eltern` und `#/ueber`. Jede Ansicht gibt optional eine Aufräumfunktion zurück; der Router ruft sie vor dem Wechsel auf (wichtig für Mikrofon, Zeichenfläche und Timer).
 - **`library.js`** hält Themen und Wörter, mischt Standardlisten ein und schützt eigene Änderungen. Gelöschte Standardwörter und -themen werden als Tombstones gespeichert, damit sie bei einem Update nicht zurückkehren.
 - **`learner.js`** hält Profil, Einstellungen, Einwilligung, Fortschritt und Sitzungsverlauf. Der Fortschritt hängt ausschließlich an der stabilen Wort-ID.
-- **`transfer.js`** bündelt Import, Export und Backup; die Ansichten enthalten keine Dateiformat-Logik.
+- **`profiles.js`** verwaltet mehrere Benutzerprofile. Die aktive Runde nutzt weiterhin die bekannten Speicher-Schlüssel; beim Wechseln wird ein vollständiger Schnappschuss gesichert und der des Zielprofils eingespielt.
+- **`drive.js`** spricht die Google-Drive-API direkt aus dem Browser an. Die OAuth-Client-ID liegt lokal, der Access-Token nur im Arbeitsspeicher der Sitzung.
+- **`transfer.js`** bündelt Import, Export und Backup; die Ansichten enthalten keine Dateiformat-Logik. Backups enthalten alle Profile, aber weiterhin keine Einwilligung und keine API-Schlüssel.
 - Die Handschrifterkennung ist über `setHandwritingProvider()` austauschbar. Standard ist Google Input Tools; im Elternbereich lassen sich Google Cloud Vision und Gemini als genauere Cloud-Anbieter wählen.
 
 ---
@@ -292,11 +300,44 @@ Der Elternbereich ist über eine zweistellige Multiplikationsaufgabe geschützt.
 | **Wörter** | Thema wählen, suchen, Wörter anlegen/bearbeiten/löschen, nach oben/unten verschieben, A–Z oder Z–A sortieren. |
 | **Themen** | Themen anlegen/bearbeiten/löschen, Reihenfolge ändern, Punkte-Sperre setzen, A–Z sortieren, CSV exportieren. |
 | **Import** | CSV aus Datei, Einfügen oder URL; **Foto-Import** mit Vorschlägen und Auswahl; Vorschau; Zielthema oder neues Thema; Importmodus. |
-| **Sichern** | JSON-Backup erstellen/wiederherstellen, CSV pro Thema exportieren, leere Vorlage laden, Standardlisten wiederherstellen, Fortschritt oder alle Daten löschen. |
+| **Sichern** | JSON-Backup aller Profile erstellen/wiederherstellen, CSV pro Thema exportieren, leere Vorlage laden, Standardlisten wiederherstellen, Fortschritt oder alle Daten löschen. |
 | **Fortschritt** | Statistik pro Wort, Sortierung nach Fehlern/Box/Quote, Box-Verteilung, Rundenverlauf, Fortschritt einzelner Wörter löschen. |
-| **Einstellungen** | Toneffekte, automatisches Vorlesen, Handschrift-Anbieter inkl. API-Schlüssel, Vorlese-Geschwindigkeit, Online-Einwilligung, Installation, Speicherbelegung. |
+| **Einstellungen** | Benutzerprofile anlegen/umbenennen/löschen, Google-Drive-Client-ID und manuelle Synchronisierung, Toneffekte, automatisches Vorlesen, Handschrift-Anbieter inkl. API-Schlüssel, Vorlese-Geschwindigkeit, Online-Einwilligung, Installation, Speicherbelegung. |
 
 Die Entsperrung gilt für die aktuelle Browser-Sitzung (`sessionStorage`). Beim Schließen des Tabs wird sie zurückgesetzt.
+
+---
+
+## Profile und Google Drive
+
+### Mehrere Personen auf einem Gerät
+
+Oben in der Kopfzeile zeigt ein Chip das aktive Profil (Emoji + Name). Ein Klick öffnet die Profilübersicht:
+
+- **Neues Profil** anlegen – startet mit den Standardwörtern und einem eigenen Fortschritt.
+- **Profil wechseln** – der aktuelle Stand wird vorher automatisch gesichert, danach lädt die App neu.
+- **Umbenennen** und **Löschen** – im Dialog und im Elternbereich unter **Einstellungen → Benutzerprofile**. Das letzte Profil kann nicht gelöscht werden.
+
+Zu jedem Profil gehören eine eigene Vokabelliste, Lernstand, Punkte, Sitzungsverlauf und Einstellungen. Die Einwilligung für Online-Funktionen wird ebenfalls pro Profil gespeichert und bleibt lokal. API-Schlüssel und die Google-Client-ID sind geräteweit und werden **nie** in ein Backup oder in die Cloud geschrieben.
+
+### Google Drive einrichten (optional)
+
+SpeakUp bringt keinen eigenen Account mit. Wer die Profile zwischen Geräten synchronisieren möchte, nutzt das eigene Google-Konto:
+
+1. In der [Google Cloud Console](https://console.cloud.google.com/) ein Projekt anlegen und die **Google Drive API** aktivieren.
+2. Unter **API & Dienste → Anmeldedaten** eine **OAuth-Client-ID vom Typ „Webanwendung“** erstellen.
+3. Bei **Autorisierte JavaScript-Ursprünge** genau die Adresse eintragen, unter der SpeakUp läuft – zum Beispiel `http://localhost:8000`. Protokoll, Hostname und Port müssen übereinstimmen; auch installierte PWAs laufen unter diesem Ursprung.
+4. Die Client-ID im Elternbereich unter **Einstellungen → Google Drive** einfügen und speichern.
+5. Auf **Verbinden** klicken. Google fragt einmalig nach Konto und Zustimmung für den Zugriff auf den versteckten App-Ordner (`drive.appdata`).
+
+Danach stehen zwei explizite Buttons zur Verfügung:
+
+- **Jetzt sichern** lädt alle Profile als `speakup-cloud.json` in den App-Ordner hoch.
+- **Aus Cloud laden** zeigt zuerst Datum und Profilanzahl und fragt nach einer Bestätigung.
+
+Es gibt **keine automatische Synchronisierung**. Der Access-Token lebt nur im Arbeitsspeicher der aktuellen Sitzung; nach einem Neuladen muss erneut verbunden werden. Der letzte Sicherungsstand wird lokal als Status angezeigt.
+
+Beim Laden gilt: Profile mit gleicher ID oder gleichem Namen werden durch die Cloud-Version ersetzt, neue Profile werden ergänzt. Die vorhandene lokale Online-Einwilligung bleibt dabei erhalten. Die Cloud-Datei enthält weder Einwilligungen noch API-Schlüssel oder die Client-ID.
 
 ---
 
@@ -326,9 +367,10 @@ Daraus folgen die Regeln:
 - Profil (Punkte, Level-Grundlage, Abzeichen, Serie),
 - Einstellungen,
 - Fortschritt pro Wort,
-- Rundenverlauf.
+- Rundenverlauf,
+- alle weiteren Profile in `data.profiles` (ohne Einwilligung).
 
-**Nicht** enthalten sind die Einwilligung zu Mikrofon und Handschrift sowie die optionalen **API-Schlüssel**. Nach dem Wiederherstellen muss die Einwilligung bewusst neu erteilt und ein Schlüssel auf dem neuen Gerät neu gespeichert werden.
+**Nicht** enthalten sind die Einwilligung zu Mikrofon und Handschrift, die optionalen **API-Schlüssel** und die Google-Client-ID. Nach dem Wiederherstellen muss die Einwilligung bewusst neu erteilt und ein Schlüssel auf dem neuen Gerät neu gespeichert werden.
 
 Die Wiederherstellung ersetzt die aktuellen Daten und lädt die App neu. Vorher wird die Anzahl der Themen, Wörter und Fortschrittseinträge angezeigt.
 
@@ -452,13 +494,14 @@ Handschrift im Elternbereich auf **Aus** stellen: Kinder tippen dann. Für einen
 
 ## Datenschutz
 
-- **Keine Konten, keine Werbung, keine Tracker, keine Analytics.**
-- Lernstände, eigene Wörter und Einstellungen bleiben in IndexedDB auf dem Gerät (Fallback: localStorage).
+- **Keine SpeakUp-Konten, keine Werbung, keine Tracker, keine Analytics.**
+- Lernstände, eigene Wörter, Profile und Einstellungen bleiben in IndexedDB auf dem Gerät (Fallback: localStorage). Optional können Eltern alle Profile manuell in den eigenen Google-Drive-App-Ordner sichern; ohne diese Einrichtung verlässt nichts die App.
 - **Spracherkennung:** Die Web Speech API sendet die Aufnahme an den Erkennungsdienst des Browser-Herstellers (bei Chrome typischerweise Google). SpeakUp speichert keine Audiodaten.
 - **Handschrift:** Die Striche werden lokal als PNG gerendert und an den im Elternbereich gewählten Dienst gesendet (Standard: Google Input Tools; optional Google Cloud Vision oder Gemini). SpeakUp speichert das Bild nicht. Ohne Einwilligung oder bei „Aus“ wird nichts gesendet.
 - **Foto-Import:** Das Foto wird im Browser verkleinert und einmalig an Google Cloud Vision oder Gemini gesendet. Es wird weder in der App noch im Backup gespeichert. Die Vorschläge bleiben nur im Arbeitsspeicher, bis der Elternbereich verlassen oder der Import verworfen wird. Bei Gemini im kostenlosen Tarif darf Google die eingesendeten Bilder zum Produkttraining verwenden.
 - **Vorlesen:** `SpeechSynthesis` nutzt die Stimmen des Geräts. Wenn eine lokale englische Stimme vorhanden ist, werden keine Daten gesendet.
 - **URL-Import:** Die eingegebene CSV-URL wird direkt vom Browser geladen. Dabei werden keine Daten an Dritte außer dem gewählten Server übertragen.
+- **Google Drive (optional):** Es wird nur auf Knopfdruck eine JSON-Datei im versteckten App-Ordner (`drive.appdata`) des eigenen Google-Kontos gelesen oder geschrieben. Sie enthält keine Einwilligungen, API-Schlüssel oder Client-ID. Der Access-Token bleibt im Arbeitsspeicher und wird nicht gespeichert; nach einem Neuladen ist eine neue Zustimmung nötig.
 - Die Einwilligung ist freiwillig. Ohne sie lernt das Kind ausschließlich mit Tippen und Vorlesen.
 - Die Einwilligung kann im Elternbereich jederzeit widerrufen werden. Sie ist **nicht** Teil des Backups und muss auf einem neuen Gerät neu erteilt werden.
 - Der Elternbereich ist eine pädagogische Hürde, kein Schutz vor technisch versierten Kindern oder Erwachsenen.
@@ -472,7 +515,7 @@ Handschrift im Elternbereich auf **Aus** stellen: Kinder tippen dann. Für einen
 - **Handschrifterkennung:** Google Input Tools ist ein **nicht offiziell dokumentierter** Dienst. Er kann sich ändern, rate-limitieren oder ausfallen; der öffentliche Endpunkt liefert für viele Eingaben keine brauchbaren Wörter. Deshalb gibt es im Elternbereich zwei optionalen Cloud-Anbieter: **Google Cloud Vision** (1.000 Einheiten/Monat kostenlos, sehr genaue Handschrift-OCR) und **Gemini** (KI mit kostenlosem Kontingent, kann sich verlesen). Beide brauchen einen eigenen API-Schlüssel und Internet. SpeakUp verwirft unbrauchbare Kandidaten, zeigt einen verständlichen Hinweis und bietet sofort das Tippen an. Bei kleinen Erkennungsfehlern kann die Antwort außerdem manuell als richtig gewertet werden; der vorherige falsche Versuch wird dabei zurückgenommen. Der Provider ist über `setHandwritingProvider()` austauschbar; ein lokales Modell ist als Ausbau geplant.
 - **Sprachausgabe:** Die Qualität hängt von den installierten Stimmen ab. Fehlt eine englische Stimme, klingt die Aussprache deutsch. Auf iOS muss die Ausgabe teilweise durch eine Nutzergeste freigeschaltet werden.
 - **Offline:** Der erste Start muss online erfolgen, damit App-Shell und Vokabeln geladen werden können. Danach funktioniert die App offline. Spracherkennung und Handschrift benötigen weiterhin Internet.
-- **Keine Synchronisierung:** Daten liegen nur auf einem Gerät/Browser. Umzug nur über Backup-Datei.
+- **Manuelle Drive-Synchronisierung:** Daten liegen standardmäßig nur auf einem Gerät/Browser. Die optionale Google-Drive-Sicherung braucht eine selbst erstellte OAuth-Client-ID, funktioniert nur auf Knopfdruck und speichert den Token nicht dauerhaft. Bei gleicher Profil-ID oder gleichem Namen gewinnt beim Laden die Cloud-Version; weitere Geräte werden nicht automatisch abgeglichen.
 - **CSV:** Kein Import von Audio. Excel kann Emojis oder Sonderzeichen je nach Version verändern; UTF-8 wählen.
 - **Foto-Import:** Braucht Internet und einen eingerichteten Cloud-Schlüssel. Handschriftliche Listen und schräge Fotos werden schlechter erkannt als gedruckte, gerade Seiten. Erkannte Paare sind Vorschläge und müssen vor dem Import geprüft werden; die App übersetzt oder ergänzt keine fehlenden Wörter.
 - **URL-Import:** Unterliegt CORS. Viele Cloud-Links funktionieren nicht direkt.
@@ -489,11 +532,11 @@ Ideen für eine spätere Version:
 
 - **Audio-Aufnahmen** eigener Wörter und Beispielsätze (mit Mikrofon aufgenommen).
 - **Bildkarten** zusätzlich zu Emojis, inklusive Upload und lokaler Speicherung.
-- **Lehrer-Modus** mit mehreren lokalen Profilen auf einem Gerät.
+- **Lehrer-Dashboard** mit einer Übersicht über mehrere Profile auf einem Gerät.
 - **Export als Arbeitsblatt** (PDF) mit den Wörtern eines Themas.
 - **Weitere Sprachen** als Lernziel (z. B. Französisch), mit austauschbarem Sprachpaket.
 - **Subtile Lernstatistik** für Eltern: Zeit pro Tag, häufigste Fehlerarten, Fortschritt über Wochen.
-- **Optionales Cloud-Backup** mit Ende-zu-Ende-Verschlüsselung und ausdrücklicher Einwilligung.
+- **Ende-zu-Ende-Verschlüsselung** für die Google-Drive-Datei, damit auch der Anbieter die Vokabellisten nicht lesen kann.
 - **Automatisierte Tests** für Antwortprüfung, CSV-Parser, Import-Modi und Fortschrittsmigration.
 - **Vollständiger Accessibility-Audit** mit Screenreader- und Kontrastprüfung.
 - **Eigene Handschrift-Provider** (z. B. lokal mit Transformers.js/TrOCR) einbauen, um die Abhängigkeit von Google zu reduzieren. Das quantisierte Modell ist ca. 67 MB groß und derzeit für schwache Geräte zu schwer.

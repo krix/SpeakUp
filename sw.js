@@ -10,7 +10,7 @@
  * Beim Aktualisieren wird der neue Worker erst nach einer Nutzer-Bestätigung
  * aktiv (SKIP_WAITING). So bleibt eine laufende Lernrunde ununterbrochen.
  */
-const APP_VERSION = "1.3.0";
+const APP_VERSION = "1.4.0";
 const SHELL_CACHE = `speakup-shell-v${APP_VERSION}`;
 const DATA_CACHE = `speakup-data-v${APP_VERSION}`;
 
@@ -33,6 +33,7 @@ const PRECACHE = [
   "./js/core/config.js",
   "./js/core/csv.js",
   "./js/core/db.js",
+  "./js/core/drive.js",
   "./js/core/handwriting.js",
   "./js/core/handwriting-cloud.js",
   "./js/core/hash.js",
@@ -40,6 +41,7 @@ const PRECACHE = [
   "./js/core/learner.js",
   "./js/core/library.js",
   "./js/core/photo-import.js",
+  "./js/core/profiles.js",
   "./js/core/secrets.js",
   "./js/core/speech.js",
   "./js/core/transfer.js",
@@ -48,6 +50,7 @@ const PRECACHE = [
   "./js/ui/confetti.js",
   "./js/ui/dom.js",
   "./js/ui/mascot.js",
+  "./js/ui/profile-switcher.js",
   "./js/ui/sfx.js",
   "./js/views/about.js",
   "./js/views/home.js",

@@ -35,7 +35,7 @@ export function renderAbout(main) {
           <div class="hero-stats">
             <span class="stat-pill">${icon("mic")} Sprache</span>
             <span class="stat-pill">${icon("pencil")} Stift</span>
-            <span class="stat-pill">${icon("lock")} Ohne Konto</span>
+            <span class="stat-pill">${icon("lock")} Ohne SpeakUp-Konto</span>
           </div>
         </div>
         <div class="about-hero-mascot">${mascot("cheer", { size: 140 })}</div>
@@ -81,8 +81,10 @@ export function renderAbout(main) {
             <div>
               <strong>Bleibt bei dir</strong>
               <p>Punkte, Level, Abzeichen, Wiederholungs-Boxen, eigene Wörter und
-              Einstellungen werden nur auf diesem Gerät gespeichert. Es gibt
-              keine Anmeldung, keine Werbung, keine Tracker und keine Analytics.</p>
+              Einstellungen liegen normalerweise nur auf diesem Gerät. Es gibt
+              kein SpeakUp-Konto, keine Werbung, keine Tracker und keine Analytics.
+              Optional können Eltern alle Profile in ihrem eigenen Google Drive
+              sichern – nur auf Knopfdruck.</p>
             </div>
           </div>
           <div class="about-fact">
@@ -182,11 +184,21 @@ export function renderAbout(main) {
             hinzuzufügen.</p>
           </details>
           <details class="faq-item">
+            <summary>Können mehrere Kinder die App nutzen?</summary>
+            <p>Ja. Tippe oben in der Kopfzeile auf dein Profil und lege weitere
+            Profile an. Jede Person hat ihre eigene Vokabelliste, Punkte und
+            Fortschritte. Beim Wechseln wird der aktuelle Stand automatisch
+            gesichert. Im Elternbereich lassen sich Profile umbenennen und löschen.</p>
+          </details>
+          <details class="faq-item">
             <summary>Wo sind meine Daten, wenn ich den Browser wechsle?</summary>
             <p>Die Daten hängen am Browser und Gerät. Für einen Umzug erstelle
             im Elternbereich unter „Sichern“ ein Backup
             (<code>speakup-backup.json</code>) und spiele es auf dem anderen
-            Gerät wieder ein.</p>
+            Gerät wieder ein. Dort sind alle Profile enthalten. Wer Google Drive
+            nutzen möchte, trägt im Elternbereich unter „Einstellungen“ die
+            eigene OAuth-Client-ID ein und sichert die Profile manuell in den
+            versteckten App-Ordner des eigenen Google-Kontos.</p>
           </details>
           <details class="faq-item">
             <summary>Kann ich eigene Vokabeln hinzufügen?</summary>
@@ -207,7 +219,7 @@ export function renderAbout(main) {
           <details class="faq-item">
             <summary>Gibt es Werbung, Abos oder In-App-Käufe?</summary>
             <p>Nein. ${esc(APP_NAME)} ist eine kostenlose, werbefreie Web-App
-            ohne Konto. Alle Funktionen sind direkt verfügbar.</p>
+            ohne SpeakUp-Konto. Alle Lernfunktionen sind direkt verfügbar.</p>
           </details>
         </div>
       </section>

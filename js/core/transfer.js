@@ -4,10 +4,11 @@
  * - CSV-Import mit Vorschau, Fehlerprüfung und den Modi
  *   Hinzufügen / Zusammenführen / Ersetzen
  * - CSV-Export pro Thema
- * - JSON-Backup (speakup-backup.json) inkl. Fortschritt
+ * - JSON-Backup (speakup-backup.json) inkl. Fortschritt und allen Profilen
  */
 import { parseVocabularyCsv, toCsv } from "./csv.js";
 import * as library from "./library.js";
+import * as profiles from "./profiles.js";
 import { makeWordId, normalizeKey } from "./hash.js";
 import db from "./db.js";
 import { getLearnerBackup, getSessions } from "./learner.js";
@@ -145,6 +146,8 @@ export async function createBackup() {
         const { id, ...rest } = session;
         return rest;
       }),
+      // Alle Profile portabel machen – weiterhin ohne Einwilligung/Schlüssel.
+      profiles: profiles.isReady() ? await profiles.exportCloudProfiles() : [],
     },
   };
 }
@@ -184,6 +187,9 @@ export function validateBackup(input) {
   if (raw.data.progress !== undefined && !Array.isArray(raw.data.progress)) {
     return { valid: false, error: "Der Lernfortschritt im Backup hat ein ungültiges Format." };
   }
+  if (raw.data.profiles !== undefined && !Array.isArray(raw.data.profiles)) {
+    return { valid: false, error: "Die Profile im Backup haben ein ungültiges Format." };
+  }
   return { valid: true, backup: raw };
 }
 
@@ -218,6 +224,15 @@ export async function restoreBackup(backup) {
     if (!session || typeof session !== "object") continue;
     const { id, ...rest } = session;
     await db.sessionAdd(rest);
+  }
+
+  // Registry mit dem wiederhergestellten aktiven Stand abgleichen und – sofern
+  // vorhanden – alle weiteren Profile aus dem Backup übernehmen.
+  if (profiles.isReady()) {
+    await profiles.refreshActiveSnapshot();
+    if (Array.isArray(data.profiles) && data.profiles.length) {
+      await profiles.importCloudProfiles(data.profiles);
+    }
   }
 
   return {

@@ -14,6 +14,7 @@ import db from "./core/db.js";
 import bus from "./core/bus.js";
 import * as library from "./core/library.js";
 import * as learner from "./core/learner.js";
+import * as profiles from "./core/profiles.js";
 import { APP_NAME } from "./core/config.js";
 import { setupInstallPrompt } from "./core/install.js";
 import { unlockTts, stopSpeaking } from "./core/tts.js";
@@ -31,6 +32,7 @@ import { renderProgress } from "./views/progress.js";
 import { renderParent } from "./views/parent.js";
 import { renderAbout } from "./views/about.js";
 import { showConsentModal } from "./views/onboarding.js";
+import { openProfileSwitcher } from "./ui/profile-switcher.js";
 import { applyHandwritingProvider } from "./core/handwriting-cloud.js";
 
 const BASE_TITLE = "SpeakUp – Englisch lernen mit Sprache & Stift";
@@ -48,6 +50,9 @@ const backBtn = document.getElementById("back-btn");
 const pointsChip = document.getElementById("points-chip");
 const pointsValue = document.getElementById("points-value");
 const soundBtn = document.getElementById("sound-btn");
+const profileBtn = document.getElementById("profile-btn");
+const profileEmoji = document.getElementById("profile-emoji");
+const profileName = document.getElementById("profile-name");
 const tabbar = document.getElementById("tabbar");
 const splash = document.getElementById("splash");
 const updateBanner = document.getElementById("update-banner");
@@ -77,6 +82,16 @@ function syncPoints({ animate = false } = {}) {
     setTimeout(() => pointsChip.classList.remove("bump"), 400);
   }
   previousPoints = points;
+}
+
+/** Zeigt, welches Profil gerade aktiv ist. */
+function syncProfile() {
+  if (!profiles.isReady()) return;
+  const active = profiles.getActiveProfile();
+  if (profileEmoji) profileEmoji.textContent = active.emoji || "🦊";
+  if (profileName) profileName.textContent = active.name;
+  profileBtn?.setAttribute("aria-label", `Profil ${active.name} – wechseln`);
+  profileBtn?.setAttribute("title", `Profil wechseln: ${active.name}`);
 }
 
 function syncSound() {
@@ -206,8 +221,12 @@ function wireNavigation() {
     if (!enabled) sfx.click();
   });
 
+  // Profilchip öffnet die Übersicht zum Wechseln und Anlegen.
+  profileBtn?.addEventListener("click", () => openProfileSwitcher());
+
   // Punkte und Einstellungen aus anderen Ansichten übernehmen.
   bus.on("learner:change", () => syncPoints({ animate: true }));
+  bus.on("profile:change", () => syncProfile());
   bus.on("settings:change", () => {
     syncSound();
     syncHandwritingProvider();
@@ -280,6 +299,11 @@ async function boot() {
         await learner.migrateProgress(migration.from, migration.to);
       }
     }
+
+    // Bestehende Daten als erstes Profil übernehmen bzw. Profilstand laden.
+    await profiles.init();
+    await profiles.refreshActiveSnapshot();
+    syncProfile();
 
     booted = true;
     syncSound();

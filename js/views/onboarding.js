@@ -40,8 +40,8 @@ export function showConsentModal({ firstRun = false, onDone = null } = {}) {
     <div class="consent-item green">
       <span class="consent-icon">${icon("lock")}</span>
       <div>
-        <strong>🔒 Bleibt auf deinem Gerät</strong>
-        <p>Punkte, Fortschritt, eigene Wörter und Einstellungen liegen nur auf diesem Gerät. Es gibt keine Anmeldung, keine Werbung, keine Tracker und keine Analytics.</p>
+        <strong>🔒 Standardmäßig bei dir</strong>
+        <p>Punkte, Fortschritt, eigene Wörter und Einstellungen liegen nur auf diesem Gerät. Es gibt kein SpeakUp-Konto, keine Werbung, keine Tracker und keine Analytics. Eltern können die Profile optional in ihrem eigenen Google Drive sichern – nur wenn sie das ausdrücklich einrichten.</p>
       </div>
     </div>
 

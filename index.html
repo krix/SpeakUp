@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>SpeakUp – Englisch lernen mit Sprache &amp; Stift</title>
-  <meta name="description" content="SpeakUp: Englisch-Vokabeln lernen mit Sprache und Stift. Freundliche Lern-App für Kinder ab 10 – ohne Werbung, ohne Konto.">
+  <meta name="description" content="SpeakUp: Englisch-Vokabeln lernen mit Sprache und Stift. Freundliche Lern-App für Kinder ab 10 – ohne Werbung, ohne SpeakUp-Konto.">
   <meta name="theme-color" content="#6C4CF1">
   <meta name="color-scheme" content="light">
   <meta name="format-detection" content="telephone=no">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https:; media-src 'self' blob:; manifest-src 'self'; worker-src 'self' blob:">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https:; media-src 'self' blob:; manifest-src 'self'; worker-src 'self' blob:; frame-src https://accounts.google.com">
 
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
@@ -78,6 +78,10 @@
         </span>
       </a>
       <div class="header-actions">
+        <button type="button" class="profile-chip" id="profile-btn" aria-label="Profil wechseln" title="Profil wechseln">
+          <span id="profile-emoji" aria-hidden="true">🦊</span>
+          <span class="profile-chip-name" id="profile-name">Mein Profil</span>
+        </button>
         <span class="points-chip" id="points-chip" title="Deine Punkte">
           <svg class="icon icon-star" aria-hidden="true"><use href="#i-star"/></svg>
           <span id="points-value">0</span>
