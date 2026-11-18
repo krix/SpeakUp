@@ -300,7 +300,7 @@ Der Elternbereich ist über eine zweistellige Multiplikationsaufgabe geschützt.
 | **Wörter** | Thema wählen, suchen, Wörter anlegen/bearbeiten/löschen, nach oben/unten verschieben, A–Z oder Z–A sortieren. |
 | **Themen** | Themen anlegen/bearbeiten/löschen, Reihenfolge ändern, Punkte-Sperre setzen, A–Z sortieren, CSV exportieren. |
 | **Import** | CSV aus Datei, Einfügen oder URL; **Foto-Import** mit Vorschlägen und Auswahl; Vorschau; Zielthema oder neues Thema; Importmodus. |
-| **Sichern** | JSON-Backup aller Profile erstellen/wiederherstellen, CSV pro Thema exportieren, leere Vorlage laden, Standardlisten wiederherstellen, Fortschritt oder alle Daten löschen. |
+| **Sichern** | Lokales JSON-Backup aller Profile als Alternative zu Google Drive erstellen/wiederherstellen, CSV pro Thema exportieren, leere Vorlage laden, Standardlisten wiederherstellen, Fortschritt oder alle Daten löschen. |
 | **Fortschritt** | Statistik pro Wort, Sortierung nach Fehlern/Box/Quote, Box-Verteilung, Rundenverlauf, Fortschritt einzelner Wörter löschen. |
 | **Einstellungen** | Benutzerprofile anlegen/umbenennen/löschen, Google-Drive-Client-ID und manuelle Synchronisierung, Toneffekte, automatisches Vorlesen, Handschrift-Anbieter inkl. API-Schlüssel, Vorlese-Geschwindigkeit, Online-Einwilligung, Installation, Speicherbelegung. |
 
@@ -359,11 +359,11 @@ Daraus folgen die Regeln:
 - Standardlisten werden bei jedem Start mit der gespeicherten Bibliothek abgeglichen. Neue Standardwörter kommen hinzu, geänderte werden aktualisiert, eigene Wörter bleiben erhalten. Gelöschte Standardwörter bleiben über Tombstones gelöscht.
 - Wurde ein Standardwort umbenannt, versucht die Bibliothek, es über das gleiche deutsche oder englische Wort wiederzuerkennen, und meldet eine Fortschritts-Migration.
 
-### Backup
+### Lokales Backup (Alternative zu Google Drive)
 
-**Elternbereich → Sichern → Backup erstellen** lädt `speakup-backup.json` herunter. Die Datei enthält:
+**Elternbereich → Sichern → Lokales Backup (ohne Google Drive) → Backup-Datei herunterladen** erzeugt `speakup-backup.json`. Die Datei ist die lokale Alternative zur Cloud-Sicherung: kein Konto, kein Internet, keine Google-API. Sie enthält:
 
-- Bibliothek (Themen, Wörter, Tombstones, Datenversion),
+- Bibliothek (alle Themen und Vokabellisten, eigene Wörter, Tombstones, Datenversion),
 - Profil (Punkte, Level-Grundlage, Abzeichen, Serie),
 - Einstellungen,
 - Fortschritt pro Wort,
@@ -372,7 +372,7 @@ Daraus folgen die Regeln:
 
 **Nicht** enthalten sind die Einwilligung zu Mikrofon und Handschrift, die optionalen **API-Schlüssel** und die Google-Client-ID. Nach dem Wiederherstellen muss die Einwilligung bewusst neu erteilt und ein Schlüssel auf dem neuen Gerät neu gespeichert werden.
 
-Die Wiederherstellung ersetzt die aktuellen Daten und lädt die App neu. Vorher wird die Anzahl der Themen, Wörter und Fortschrittseinträge angezeigt.
+**Elternbereich → Sichern → Lokales Backup wiederherstellen** liest die Datei zurück. Die Wiederherstellung ersetzt die aktuellen Daten und lädt die App neu. Vorher wird die Anzahl der Themen, Wörter und Fortschrittseinträge angezeigt. Wer stattdessen Cloud-Sync nutzen möchte, findet ihn weiterhin unter **Einstellungen → Google Drive**.
 
 ### Zurücksetzen
 

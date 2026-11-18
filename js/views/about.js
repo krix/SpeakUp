@@ -197,12 +197,14 @@ export function renderAbout(main) {
           <details class="faq-item">
             <summary>Wo sind meine Daten, wenn ich den Browser wechsle?</summary>
             <p>Die Daten hängen am Browser und Gerät. Für einen Umzug erstelle
-            im Elternbereich unter „Sichern“ ein Backup
+            im Elternbereich unter „Sichern“ ein lokales Backup
             (<code>speakup-backup.json</code>) und spiele es auf dem anderen
-            Gerät wieder ein. Dort sind alle Profile enthalten. Wer Google Drive
-            nutzen möchte, trägt im Elternbereich unter „Einstellungen“ die
-            eigene OAuth-Client-ID ein und sichert die Profile manuell in den
-            versteckten App-Ordner des eigenen Google-Kontos.</p>
+            Gerät wieder ein. Dort sind alle Vokabellisten und Profile enthalten.
+            Das ist die Alternative zu Google Drive – ohne Konto und ohne
+            Internet. Wer stattdessen die Cloud nutzen möchte, trägt im
+            Elternbereich unter „Einstellungen“ die eigene OAuth-Client-ID ein
+            und sichert die Profile manuell in den versteckten App-Ordner des
+            eigenen Google-Kontos.</p>
           </details>
           <details class="faq-item">
             <summary>Kann ich eigene Vokabeln hinzufügen?</summary>

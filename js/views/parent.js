@@ -1366,31 +1366,34 @@ export function renderParent(main) {
         <div class="panel">
           <div class="panel-head">
             <div>
-              <h2>Backup erstellen</h2>
-              <p>Eine Datei mit allem: allen Profilen, Vokabeln, eigenen Themen, Fortschritt und Einstellungen.</p>
+              <h2>Lokales Backup (ohne Google Drive)</h2>
+              <p>Die Alternative zur Cloud-Sicherung: eine Datei mit <strong>allen Vokabellisten</strong>,
+              eigenen Themen, allen Profilen, Lernfortschritt, Sitzungen und Einstellungen.
+              Kein Konto, kein Internet nötig.</p>
             </div>
             <button type="button" class="btn btn-small" data-action="download-backup">
-              ${icon("download")} ${esc("speakup-backup.json")}
+              ${icon("download")} Backup-Datei herunterladen
             </button>
           </div>
+          <p class="tiny mb-0">Dateiname: <code>speakup-backup.json</code></p>
           <div class="callout success">
             ${icon("lock")}
-            <p class="mb-0"><strong>Alles bleibt lokal.</strong> Das Backup wird nur auf diesem Gerät erzeugt.
-            Es enthält bewusst <em>keine</em> Mikrofon- oder Handschrift-Einwilligung
-            und <em>keine</em> API-Schlüssel.</p>
+            <p class="mb-0"><strong>Alles bleibt lokal.</strong> Die Datei wird nur auf diesem Gerät erzeugt.
+            Sie enthält bewusst <em>keine</em> Mikrofon- oder Handschrift-Einwilligung,
+            <em>keine</em> API-Schlüssel und <em>keine</em> Google-Client-ID.</p>
           </div>
         </div>
 
         <div class="panel">
           <div class="panel-head">
             <div>
-              <h2>Backup wiederherstellen</h2>
-              <p>Achtung: Ersetzt die aktuelle Vokabelliste und den Fortschritt.</p>
+              <h2>Lokales Backup wiederherstellen</h2>
+              <p>Alternative zum Cloud-Laden: Ersetzt Vokabellisten, Profile und Fortschritt durch den Stand aus <code>speakup-backup.json</code>.</p>
             </div>
           </div>
           <label class="dropzone" for="backup-file" tabindex="0">
             ${icon("upload")}
-            <span>speakup-backup.json auswählen</span>
+            <span>speakup-backup.json auswählen (lokale Datei)</span>
             <span class="tiny">Nach dem Einlesen wird die App neu geladen.</span>
           </label>
           <input type="file" id="backup-file" accept=".json,application/json" class="sr-only">
@@ -1447,15 +1450,16 @@ export function renderParent(main) {
 
         <div class="callout">
           ${icon("info")}
-          <p class="mb-0">Tipp: Erstelle vor größeren Änderungen ein Backup. Die Datei heißt
-          <code>speakup-backup.json</code> und kann auf ein anderes Gerät kopiert werden.</p>
+          <p class="mb-0">Tipp: Erstelle vor größeren Änderungen ein lokales Backup. Die Datei heißt
+          <code>speakup-backup.json</code>; sie ist die Alternative zur Google-Drive-Sicherung und
+          lässt sich auf ein anderes Gerät kopieren.</p>
         </div>
       </div>`;
 
     panel.querySelector('[data-action="download-backup"]')?.addEventListener("click", async () => {
       try {
         await transfer.downloadBackup();
-        showToast("Backup heruntergeladen.", { type: "success", iconName: "download" });
+        showToast("Lokales Backup heruntergeladen.", { type: "success", iconName: "download" });
       } catch (error) {
         showToast(error.message || "Das Backup konnte nicht erstellt werden.", { type: "error" });
       }
