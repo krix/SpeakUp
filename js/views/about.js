@@ -149,7 +149,11 @@ export function renderAbout(main) {
             <code>localhost</code>) und einen Browser, der die Web Speech API
             unterstützt – zum Beispiel Chrome, Edge oder Safari. Firefox kann
             es nicht. Auf dem iPhone ist die Erkennung eingeschränkt und
-            braucht Siri bzw. Diktat. In allen Fällen kannst du tippen.</p>
+            braucht Siri bzw. Diktat. SpeakUp holt beim Klick auf das Mikrofon
+            zuerst die Berechtigung und wartet auf das „start“-Signal – sprich
+            erst, wenn „Ich höre zu“ erscheint. Wurde die Berechtigung früher
+            abgelehnt, erlaube das Mikrofon in den Browser-Einstellungen und
+            lade die Seite neu. In allen Fällen kannst du tippen.</p>
           </details>
           <details class="faq-item">
             <summary>Meine Handschrift wird nicht erkannt.</summary>

@@ -17,7 +17,9 @@ import { speak, stopSpeaking, unlockTts } from "../core/tts.js";
 import {
   createSpeechRecognizer,
   isSpeechSupported,
+  requestMicrophoneStream,
   speechSupportHint,
+  stopMicrophoneStream,
 } from "../core/speech.js";
 import { recognizeHandwriting } from "../core/handwriting.js";
 import { DrawingPad } from "../ui/canvas.js";
@@ -398,18 +400,39 @@ function runRound(main, config, onRestart) {
     const label = stage.querySelector("#mic-label");
     const heard = stage.querySelector("#heard-box");
     let listening = false;
+    let starting = false;
 
-    const setListening = (value) => {
-      listening = value;
-      micButton?.classList.toggle("is-listening", value);
-      micButton?.setAttribute("aria-label", value ? "Aufnahme stoppen" : "Mikrofon starten und Wort sprechen");
-      if (label) label.textContent = value ? "Ich höre zu … sprich jetzt!" : "Tippe zum Sprechen";
-      heard?.classList.toggle("is-active", value);
-      if (value && heard) heard.textContent = "…";
+    /** Drei Zustände: bereit, wird vorbereitet, hört wirklich zu. */
+    const setMicState = (state) => {
+      starting = state === "starting";
+      listening = state === "listening";
+      const busy = state === "starting";
+      micButton?.classList.toggle("is-listening", listening);
+      micButton?.classList.toggle("is-starting", busy);
+      micButton?.toggleAttribute("disabled", busy);
+      micButton?.setAttribute("aria-busy", String(busy));
+      micButton?.setAttribute(
+        "aria-label",
+        busy ? "Mikrofon wird vorbereitet" : listening ? "Aufnahme stoppen" : "Mikrofon starten und Wort sprechen"
+      );
+      if (label) {
+        label.textContent = busy
+          ? "Mikrofon wird vorbereitet …"
+          : listening
+            ? "Ich höre zu … sprich jetzt!"
+            : "Tippe zum Sprechen";
+      }
+      heard?.classList.toggle("is-active", listening);
+      if (busy && heard) heard.textContent = "Mikrofon wird bereit …";
+      if (listening && heard) heard.textContent = "…";
     };
 
-    const start = () => {
-      if (state.answered || !state.alive) return;
+    const start = async () => {
+      if (state.answered || !state.alive || starting) return;
+      if (listening) {
+        state.recognizer?.stop();
+        return;
+      }
       if (!state.allowOnline) {
         showConsentModal({
           onDone: (consent) => {
@@ -428,60 +451,76 @@ function runRound(main, config, onRestart) {
         showTyping();
         return;
       }
-      if (listening) {
-        state.recognizer?.stop();
-        return;
-      }
 
+      // Muss vor dem ersten await passieren – iOS braucht eine Nutzer-Geste.
       unlockTts();
-      setListening(true);
-      const recognizer = createSpeechRecognizer({
-        lang: "en-US",
-        timeoutMs: 12000,
-        onInterim: (text) => {
-          if (heard && state.alive) heard.textContent = text;
-        },
-      });
-      state.recognizer = recognizer;
+      setMicState("starting");
 
-      recognizer.promise
-        .then((result) => {
-          if (!state.alive || state.answered) return;
-          if (heard) heard.textContent = result.transcript || "…";
-          // Alle Alternativen prüfen – die Erkennung liefert oft gute Zweitvorschläge.
-          const alternatives = result.alternatives?.length ? result.alternatives : [result.transcript];
-          let match = null;
-          for (const candidate of alternatives) {
-            const check = checkAnswer(candidate, word);
-            if (check.correct) {
-              match = { candidate, check };
-              break;
-            }
-          }
-          if (match) {
-            submitAnswer(match.candidate, true, { source: "speech" });
-          } else {
-            submitAnswer(result.transcript || "", false, {
-              source: "speech",
-              detected: result.transcript,
-              candidates: alternatives,
-            });
-          }
-        })
-        .catch((error) => {
-          if (!state.alive || state.answered) return;
-          setListening(false);
-          if (error?.code === "aborted") return;
-          if (heard) heard.textContent = error?.message || "Das hat nicht geklappt.";
-          showToast(error?.message || "Das hat nicht geklappt.", { type: "warn", iconName: "mic" });
-          if (["unsupported", "not-allowed", "service-not-allowed", "network", "audio-capture"].includes(error?.code)) {
-            showTyping();
-          }
-        })
-        .finally(() => {
-          if (state.alive) setListening(false);
-          if (state.recognizer === recognizer) state.recognizer = null;
+      let microphone = null;
+      let recognizer = null;
+      try {
+        // Berechtigung und Mikrofon-Track schon jetzt holen, damit die
+        // Erkennung nicht auf eine offene Browser-Abfrage wartet.
+        microphone = await requestMicrophoneStream();
+        if (!state.alive || state.answered) {
+          stopMicrophoneStream(microphone);
+          return;
+        }
+
+        recognizer = createSpeechRecognizer({
+          lang: "en-US",
+          timeoutMs: 12000,
+          stream: microphone,
+          onStart: () => {
+            if (state.alive && !state.answered) setMicState("listening");
+          },
+          onInterim: (text) => {
+            if (heard && state.alive) heard.textContent = text;
+          },
         });
+        state.recognizer = recognizer;
+        microphone = null; // Der Recognizer gibt den Stream selbst frei.
+
+        const result = await recognizer.promise;
+        if (!state.alive || state.answered) return;
+        if (heard) heard.textContent = result.transcript || "…";
+        // Alle Alternativen prüfen – die Erkennung liefert oft gute Zweitvorschläge.
+        const alternatives = result.alternatives?.length ? result.alternatives : [result.transcript];
+        let match = null;
+        for (const candidate of alternatives) {
+          const check = checkAnswer(candidate, word);
+          if (check.correct) {
+            match = { candidate, check };
+            break;
+          }
+        }
+        if (match) {
+          submitAnswer(match.candidate, true, { source: "speech" });
+        } else {
+          submitAnswer(result.transcript || "", false, {
+            source: "speech",
+            detected: result.transcript,
+            candidates: alternatives,
+          });
+        }
+      } catch (error) {
+        if (!state.alive || state.answered) return;
+        if (error?.code === "aborted") return;
+        setMicState("idle");
+        if (heard) heard.textContent = error?.message || "Das hat nicht geklappt.";
+        showToast(error?.message || "Das hat nicht geklappt.", { type: "warn", iconName: "mic" });
+        if (
+          ["unsupported", "not-allowed", "service-not-allowed", "insecure", "start-failed", "network", "audio-capture"].includes(
+            error?.code
+          )
+        ) {
+          showTyping();
+        }
+      } finally {
+        stopMicrophoneStream(microphone);
+        if (state.alive && !state.answered) setMicState("idle");
+        if (recognizer && state.recognizer === recognizer) state.recognizer = null;
+      }
     };
 
     micButton?.addEventListener("click", start);

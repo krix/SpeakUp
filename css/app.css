@@ -510,6 +510,8 @@ main:focus { outline: none; }
 .mic-btn .icon { width: 44px; height: 44px; stroke-width: 2; }
 .mic-btn:hover { transform: scale(1.04); }
 .mic-btn:active { transform: scale(.96); }
+.mic-btn:disabled { cursor: progress; opacity: .82; transform: none; }
+.mic-btn.is-starting { box-shadow: 0 0 0 8px rgba(108, 76, 241, .14); }
 .mic-btn.is-listening { background: linear-gradient(145deg, #F0552B, #C6222F); box-shadow: 0 12px 26px rgba(198, 34, 47, .3); }
 .mic-btn.is-listening::before, .mic-btn.is-listening::after {
   content: ""; position: absolute; inset: -8px; border-radius: 50%;
