@@ -49,6 +49,10 @@ Sprechen, hören, mit dem Stift schreiben oder tippen: SpeakUp kombiniert vier L
 
 - Maskottchen **Pip** mit wechselnden Sprüchen und Stimmungen.
 - Punkte, Levels und Leveltitel, Tagesziel, Tages-Serie und Abzeichen.
+- **Punkt-Meilensteine** bei 100, 250, 500, 1000 und 2000 Punkten mit einmaliger Feier (Konfetti, Spruch, Sound) und dauerhaftem Eintrag im Profil.
+- **Tagesziel-Bonus:** Wer 50 Punkte an einem Tag schafft, bekommt eine eigene Feier und das Abzeichen „Tagesziel!“.
+- **Themen-Medaillen:** 🥉 ab 50 %, 🥈 ab 75 %, 🏆 bei 100 % eines Themas – sichtbar auf Startseite und Fortschrittsseite.
+- **Glücksrad nach der Runde:** Eine kleine Überraschung (Bonuspunkte oder ein Pip-Spruch), die schon beim Speichern der Runde berücksichtigt wird.
 - 1–3 Sterne pro Runde, Konfetti und dezente WebAudio-Toneffekte (abschaltbar).
 - Themenwelten werden ab bestimmten Punktzahlen freigeschaltet.
 

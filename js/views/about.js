@@ -63,7 +63,8 @@ export function renderAbout(main) {
             <span class="about-step-number">3</span>
             <h3>${icon("refresh")} Wiederholen &amp; sammeln</h3>
             <p>Richtige Wörter wandern in höhere Boxen und kommen später wieder.
-            Fehler tauchen in derselben Runde noch einmal auf.</p>
+            Fehler tauchen in derselben Runde noch einmal auf. Punkte,
+            Meilensteine, Medaillen und ein Glücksrad feiern deine Fortschritte.</p>
           </div>
         </div>
       </section>
@@ -186,6 +187,15 @@ export function renderAbout(main) {
             klingt die Aussprache deutsch. Auf vielen Geräten hilft es, unter
             den Systemeinstellungen eine englische Stimme (en-GB oder en-US)
             hinzuzufügen.</p>
+          </details>
+          <details class="faq-item">
+            <summary>Wann gibt es besondere Überraschungen?</summary>
+            <p>Bei 100, 250, 500, 1000 und 2000 Punkten feiert Pip einmalig mit
+            Konfetti und einem Spruch. Das Tagesziel (50 Punkte an einem Tag)
+            gibt es ebenfalls als Feier und Abzeichen. Für jedes Thema gibt es
+            Medaillen: 🥉 ab der Hälfte, 🥈 ab drei Vierteln und 🏆 bei allen
+            Wörtern. Nach jeder Runde wartet außerdem ein Glücksrad mit einer
+            kleinen Überraschung – manchmal mit Bonuspunkten.</p>
           </details>
           <details class="faq-item">
             <summary>Können mehrere Kinder die App nutzen?</summary>

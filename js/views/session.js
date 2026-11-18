@@ -33,6 +33,7 @@ import {
 } from "../ui/dom.js";
 import { mascot, MASCOT_LINES, randomLine } from "../ui/mascot.js";
 import { sfx } from "../ui/sfx.js";
+import { pickWheelReward, showWheel } from "../ui/wheel.js";
 import { confetti } from "../ui/confetti.js";
 import { showConsentModal } from "./onboarding.js";
 
@@ -938,6 +939,8 @@ function runRound(main, config, onRestart) {
     const perfect = state.wrongByWord.size === 0;
     const durationMs = Date.now() - state.startedAt;
     const missedWords = initialWords.filter((word) => state.wrongByWord.has(word.id));
+    const wheelReward = pickWheelReward();
+    const totalPoints = state.points + wheelReward.points;
 
     updateProgress();
     const fill = main.querySelector("#session-progress");
@@ -957,6 +960,13 @@ function runRound(main, config, onRestart) {
       totalWords: total,
       firstTryCorrect: state.firstTryCorrect,
       durationMs,
+      bonusPoints: wheelReward.points,
+      wheelReward: {
+        id: wheelReward.id,
+        icon: wheelReward.icon,
+        label: wheelReward.label,
+        points: wheelReward.points,
+      },
     };
 
     // Ergebnis-Ansicht sofort zeigen; das Speichern darf kurz dauern.
@@ -968,7 +978,8 @@ function runRound(main, config, onRestart) {
         </div>
         <h1 class="result-title">${stars === 3 ? "Fantastisch!" : stars === 2 ? "Super gemacht!" : "Gut geübt!"}</h1>
         <p class="muted mb-2">${esc(state.themeName)} · ${plural(total, "Wort", "Wörter")} · ${esc(MODE_INFO[state.baseMode]?.label || "Mix")}</p>
-        <span class="result-points">${icon("star", "icon-star")} +${state.points} Punkte</span>
+        <span class="result-points">${icon("star", "icon-star")} +${totalPoints} Punkte</span>
+        <span class="tiny bold mt-1">inklusive Glücksrad-Überraschung</span>
         <div class="result-stats">
           <div class="result-stat"><strong>${state.firstTryCorrect} / ${total}</strong><span>beim ersten Versuch</span></div>
           <div class="result-stat"><strong>${state.maxStreak}</strong><span>beste Serie</span></div>
@@ -991,7 +1002,7 @@ function runRound(main, config, onRestart) {
             ${icon("check")}
             <p class="mb-0"><strong>Keine Fehler!</strong> Du hast alle Wörter geknackt.</p>
           </div>`}
-        <div id="result-extra"></div>
+        <div id="result-extra" aria-live="polite"></div>
         <div class="btn-row mt-3" style="justify-content:center">
           <button type="button" class="btn" data-action="again">${icon("refresh")} Nochmal spielen</button>
           <a class="btn btn-ghost" href="#/home">${icon("home")} Startseite</a>
@@ -1017,6 +1028,26 @@ function runRound(main, config, onRestart) {
         const extra = stage.querySelector("#result-extra");
         if (!extra) return;
         const parts = [];
+        if (result.dailyGoalReached) {
+          parts.push(`
+            <div class="callout success mt-2" style="text-align:left">
+              ${icon("check")}
+              <p class="mb-0"><strong>Tagesziel geschafft!</strong> ${learner.DAILY_GOAL_POINTS} Punkte an einem Tag – stark!</p>
+            </div>`);
+        }
+        if (result.newMilestones?.length) {
+          parts.push(`
+            <div class="milestone-celebration">
+              ${result.newMilestones.map((milestone) => `
+                <span class="milestone-burst">
+                  <span class="milestone-burst-icon" aria-hidden="true">${esc(milestone.icon)}</span>
+                  <strong>${esc(milestone.title)}</strong>
+                  <small>${milestone.points} Punkte erreicht</small>
+                </span>`).join("")}
+            </div>`);
+          confetti({ count: 120, originY: 0.35 });
+          sfx.celebrate();
+        }
         if (result.leveledUp) {
           parts.push(`
             <div class="callout success mt-2" style="text-align:left">
@@ -1036,7 +1067,17 @@ function runRound(main, config, onRestart) {
             </div>`);
           sfx.badge();
         }
+        parts.push(`
+          <button type="button" class="wheel-card" data-action="wheel">
+            <span class="wheel-card-icon" aria-hidden="true">🎡</span>
+            <span><strong>Glücksrad drehen!</strong><small>Deine Überraschung aus dieser Runde ansehen</small></span>
+            ${icon("forward")}
+          </button>`);
         extra.innerHTML = parts.join("");
+        extra.querySelector('[data-action="wheel"]')?.addEventListener("click", () => {
+          sfx.click();
+          showWheel(wheelReward);
+        });
       })
       .catch((error) => {
         console.error("[session] Ergebnisse konnten nicht gespeichert werden", error);

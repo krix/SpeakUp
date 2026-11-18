@@ -5,6 +5,7 @@ import bus from "../core/bus.js";
 import { icon, esc, showToast } from "../ui/dom.js";
 import { mascot, MASCOT_LINES, randomLine } from "../ui/mascot.js";
 import { sfx } from "../ui/sfx.js";
+import { themeMedal } from "../ui/medal.js";
 import { startSession } from "./session.js";
 import { showConsentModal } from "./onboarding.js";
 
@@ -37,7 +38,7 @@ export function renderHome(main) {
   const allWords = library.getAllWords();
   const progress = learner.getProgressMap();
   const streak = learner.getDisplayStreak();
-  const daily = learner.getDailyGoal(50);
+  const daily = learner.getDailyGoal(learner.DAILY_GOAL_POINTS);
   const unlocked = themes.filter((theme) => library.isThemeUnlocked(theme, profile.points));
   const nextLocked = themes
     .filter((theme) => !library.isThemeUnlocked(theme, profile.points))
@@ -66,7 +67,7 @@ export function renderHome(main) {
               aria-label="${esc(theme.name)}: ${stats.total} Wörter, ${stats.mastered} gemeistert${isLocked ? ", gesperrt" : ""}">
         ${isLocked ? `<span class="lock-chip">${icon("lock")} ${theme.unlockPoints} Punkte</span>` : ""}
         <span class="theme-card-emoji" aria-hidden="true">${esc(theme.emoji)}</span>
-        <span class="theme-name">${esc(theme.name)}</span>
+        <span class="theme-name">${esc(theme.name)} ${themeMedal(percent) ? `<span class="theme-medal" aria-label="Themen-Medaille" title="Themen-Medaille">${themeMedal(percent)}</span>` : ""}</span>
         <span class="theme-card-meta">${stats.total} ${stats.total === 1 ? "Wort" : "Wörter"}${stats.mastered ? ` · ${stats.mastered} gemeistert` : ""}</span>
         <span class="theme-progress">
           <span class="theme-progress-top"><span>Gemeistert</span><span>${percent} %</span></span>

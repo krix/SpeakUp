@@ -6,6 +6,7 @@ import * as library from "../core/library.js";
 import * as learner from "../core/learner.js";
 import { icon, esc, formatDate, plural, showToast } from "../ui/dom.js";
 import { mascot } from "../ui/mascot.js";
+import { themeMedal } from "../ui/medal.js";
 import { speak, unlockTts } from "../core/tts.js";
 import { startSession } from "./session.js";
 
@@ -35,9 +36,10 @@ export function renderProgress(main) {
   const allWords = library.getAllWords();
   const boxes = learner.getBoxCounts();
   const streak = learner.getDisplayStreak();
-  const daily = learner.getDailyGoal(50);
+  const daily = learner.getDailyGoal(learner.DAILY_GOAL_POINTS);
   const badges = learner.getBadgeStates();
   const earnedBadges = badges.filter((badge) => badge.earned);
+  const milestones = learner.getMilestoneStates();
   const weak = learner.getWeakWords(allWords, 8);
   const mastered = [...progress.values()].filter((record) => record.seen && record.box >= 5).length;
   const started = [...progress.values()].filter((record) => record.seen).length;
@@ -64,7 +66,7 @@ export function renderProgress(main) {
           <span class="emoji" aria-hidden="true">${esc(theme.emoji)}</span>
           <div>
             <div class="row-between" style="gap:8px">
-              <span class="name">${esc(theme.name)} ${isLocked ? `<span class="lock-chip" style="position:static;margin-left:6px">${icon("lock")} ${theme.unlockPoints}</span>` : ""}</span>
+              <span class="name">${esc(theme.name)} ${themeMedal(percent) ? `<span class="theme-medal" aria-label="Themen-Medaille" title="Themen-Medaille">${themeMedal(percent)}</span>` : ""} ${isLocked ? `<span class="lock-chip" style="position:static;margin-left:6px">${icon("lock")} ${theme.unlockPoints}</span>` : ""}</span>
               <span class="tiny bold muted">${stats.mastered} / ${stats.total}</span>
             </div>
             <div class="progress-track" role="progressbar" aria-valuenow="${percent}" aria-valuemin="0" aria-valuemax="100" aria-label="Gemeistert in ${esc(theme.name)}">
@@ -102,6 +104,19 @@ export function renderProgress(main) {
         <span class="badge-icon" aria-hidden="true">${esc(badge.icon)}</span>
         <strong>${esc(badge.title)}</strong>
         <small>${badge.earned ? `Geschafft am ${esc(formatDate(badge.earnedAt))}` : esc(badge.description)}</small>
+      </div>`
+    )
+    .join("");
+
+  const milestoneCards = milestones
+    .map(
+      (milestone) => `
+      <div class="milestone ${milestone.earned ? "is-earned" : ""}">
+        <span class="milestone-icon" aria-hidden="true">${esc(milestone.icon)}</span>
+        <span>
+          <strong>${milestone.points} Punkte</strong>
+          <small>${milestone.earned ? (milestone.earnedAt ? formatDate(milestone.earnedAt) : "Bereits geschafft") : `Noch ${milestone.remaining}`}</small>
+        </span>
       </div>`
     )
     .join("");
@@ -197,10 +212,12 @@ export function renderProgress(main) {
 
       <section aria-labelledby="badges-title">
         <div class="section-head">
-          <h2 id="badges-title">Abzeichen</h2>
-          <p>${earnedBadges.length} von ${badges.length} geschafft</p>
+          <h2 id="badges-title">Abzeichen &amp; Meilensteine</h2>
+          <p>${earnedBadges.length} von ${badges.length} Abzeichen geschafft</p>
         </div>
         <div class="badge-grid">${badgeCards}</div>
+        <h3 class="subhead" id="milestones-title">Punkt-Meilensteine</h3>
+        <div class="milestone-grid" aria-labelledby="milestones-title">${milestoneCards}</div>
       </section>
 
       <section aria-labelledby="history-title">

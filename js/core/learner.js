@@ -20,6 +20,18 @@ export const LEITNER_LABELS = {
 };
 
 export const LEVEL_THRESHOLDS = [0, 80, 200, 360, 560, 800, 1100, 1450, 1850, 2300, 2800, 3400, 4100, 4900, 5800];
+
+/** Einmalige Punkt-Meilensteine mit kindgerechten Belohnungen. */
+export const MILESTONES = [
+  { points: 100, icon: "🎉", title: "Hundert geschafft!" },
+  { points: 250, icon: "🚀", title: "Richtig in Schwung!" },
+  { points: 500, icon: "⭐", title: "Sternenstarter!" },
+  { points: 1000, icon: "🏆", title: "Tausend Punkte!" },
+  { points: 2000, icon: "👑", title: "Wort-Königin/-König!" },
+];
+
+/** Tagesziel für den zusätzlichen Bonus. */
+export const DAILY_GOAL_POINTS = 50;
 const LEVEL_TITLES = [
   "Wortstarter",
   "Wortfuchs",
@@ -57,8 +69,9 @@ const DEFAULT_PROFILE = {
   writeCorrect: 0,
   mixSessions: 0,
   streak: { count: 0, best: 0, lastDay: null },
-  daily: { date: null, points: 0, words: 0 },
+  daily: { date: null, points: 0, words: 0, rewarded: false },
   badges: [],
+  milestones: [],
   createdAt: null,
 };
 
@@ -106,6 +119,27 @@ function normalizeProfile(raw) {
   merged.speakCorrect = Math.max(0, Number(merged.speakCorrect) || 0);
   merged.writeCorrect = Math.max(0, Number(merged.writeCorrect) || 0);
   merged.mixSessions = Math.max(0, Number(merged.mixSessions) || 0);
+  merged.daily.rewarded = Boolean(merged.daily.rewarded);
+  // Alte Profile, die das Tagesziel heute schon erreicht haben, feiern nicht erneut.
+  if (merged.daily.date === localDayKey() && merged.daily.points >= DAILY_GOAL_POINTS) {
+    merged.daily.rewarded = true;
+  }
+
+  // Bestehende Profile mit hohen Punktzahlen erhalten ihre Meilensteine
+  // nachträglich ohne Feier – sonst würden alte Stände erneut auslösen.
+  merged.milestones = Array.isArray(merged.milestones)
+    ? merged.milestones
+        .filter((item) => MILESTONES.some((milestone) => milestone.points === item?.points))
+        .map((item) => ({ points: item.points, at: item.at || null }))
+    : [];
+  const reached = new Set(merged.milestones.map((item) => item.points));
+  for (const milestone of MILESTONES) {
+    if (merged.points >= milestone.points && !reached.has(milestone.points)) {
+      merged.milestones.push({ points: milestone.points, at: null });
+      reached.add(milestone.points);
+    }
+  }
+
   merged.createdAt = merged.createdAt || new Date().toISOString();
   return merged;
 }
@@ -203,7 +237,7 @@ export function getDisplayStreak() {
   return 0;
 }
 
-export function getDailyGoal(goal = 50) {
+export function getDailyGoal(goal = DAILY_GOAL_POINTS) {
   if (!profile) return { points: 0, percent: 0, goal };
   const points = profile.daily.date === localDayKey() ? profile.daily.points : 0;
   return { points, goal, percent: clamp(Math.round((points / goal) * 100), 0, 100) };
@@ -459,6 +493,13 @@ export const BADGES = [
     test: ({ profile: p }) => p.totalCorrect >= 50,
   },
   {
+    id: "tagesziel",
+    icon: "🎯",
+    title: "Tagesziel!",
+    description: `${DAILY_GOAL_POINTS} Punkte an einem Tag gesammelt.`,
+    test: ({ profile: p }) => (p.daily?.points || 0) >= DAILY_GOAL_POINTS,
+  },
+  {
     id: "woche",
     icon: "🗓️",
     title: "Eine Woche dabei",
@@ -522,13 +563,42 @@ function evaluateBadges(words) {
   return newlyEarned;
 }
 
+/** Zeigt alle Punkt-Meilensteine mit Status für die Fortschrittsseite. */
+export function getMilestoneStates(points = profile?.points || 0) {
+  const earned = new Map((profile?.milestones || []).map((item) => [item.points, item.at]));
+  return MILESTONES.map((milestone) => ({
+    ...milestone,
+    earned: earned.has(milestone.points),
+    earnedAt: earned.get(milestone.points) || null,
+    remaining: Math.max(0, milestone.points - points),
+  }));
+}
+
+/** Feiert Meilensteine nur dann, wenn sie gerade überschritten wurden. */
+function evaluateMilestones(pointsBefore, pointsAfter) {
+  const reached = new Set((profile.milestones || []).map((item) => item.points));
+  const newlyEarned = [];
+  for (const milestone of MILESTONES) {
+    if (reached.has(milestone.points)) continue;
+    if (pointsBefore < milestone.points && pointsAfter >= milestone.points) {
+      const entry = { points: milestone.points, at: Date.now() };
+      profile.milestones.push(entry);
+      newlyEarned.push({ ...milestone, ...entry });
+    }
+  }
+  return newlyEarned;
+}
+
 /**
  * Runde abschließen: Punkte, Serie, Statistik und Abzeichen speichern.
  * @param {object} summary
  */
 export async function finishSession(summary) {
   const levelBefore = getLevelInfo().level;
-  const pointsEarned = Math.max(0, Math.round(summary.points || 0));
+  const pointsBefore = profile.points;
+  const basePoints = Math.max(0, Math.round(summary.points || 0));
+  const bonusPoints = Math.max(0, Math.round(summary.bonusPoints || 0));
+  const pointsEarned = basePoints + bonusPoints;
   profile.points += pointsEarned;
   profile.totalAnswered += Math.max(0, summary.attempts || 0);
   profile.totalCorrect += Math.max(0, summary.correctAttempts || 0);
@@ -548,12 +618,17 @@ export async function finishSession(summary) {
   }
   profile.streak.best = Math.max(profile.streak.best || 0, profile.streak.count);
 
+  const dailyWasRewarded = profile.daily.date === today ? Boolean(profile.daily.rewarded) : false;
   if (profile.daily.date !== today) {
-    profile.daily = { date: today, points: 0, words: 0 };
+    profile.daily = { date: today, points: 0, words: 0, rewarded: false };
   }
   profile.daily.points += pointsEarned;
   profile.daily.words += summary.totalWords || 0;
 
+  const dailyGoalReached = !dailyWasRewarded && profile.daily.points >= DAILY_GOAL_POINTS;
+  if (dailyGoalReached) profile.daily.rewarded = true;
+
+  const newMilestones = evaluateMilestones(pointsBefore, profile.points);
   const newBadges = evaluateBadges(summary.words || []);
   const levelAfter = getLevelInfo().level;
 
@@ -575,9 +650,14 @@ export async function finishSession(summary) {
 
   return {
     pointsEarned,
+    basePoints,
+    bonusPoints,
+    wheel: summary.wheelReward || null,
     levelBefore,
     levelAfter,
     leveledUp: levelAfter > levelBefore,
+    newMilestones,
+    dailyGoalReached,
     newBadges,
     profile,
     level: getLevelInfo(),
