@@ -679,6 +679,14 @@ main:focus { outline: none; }
 .wheel-card small { color: var(--c-ink-soft); font-weight: 700; }
 .wheel-card-icon { flex: none; font-size: 2rem; }
 .wheel-card .icon { flex: none; }
+.wheel-card[disabled],
+.wheel-card.is-opened {
+  cursor: default;
+  opacity: 1;
+  border-color: var(--c-accent);
+  background: linear-gradient(135deg, #FFFDF4, #FFF3CF);
+  box-shadow: none;
+}
 
 /* ---------- Fortschritt ---------- */
 .progress-hero {

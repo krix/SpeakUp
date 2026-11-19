@@ -818,6 +818,22 @@ function runRound(main, config, onRestart) {
         }
       : null;
 
+    // Bei Spracheingabe darf ein falsch erkannter Versuch sofort wiederholt
+    // werden, ohne dass der Erkennungsfehler als Wissensfehler stehen bleibt.
+    const speechRetry =
+      !correct && meta.source === "speech"
+        ? {
+            word,
+            mode: current.mode,
+            firstAttempt,
+            streakBefore,
+            queuedEntry,
+            previousProgress,
+            recordPromise,
+            previousAttempts,
+          }
+        : null;
+
     renderFeedback({
       word,
       correct,
@@ -825,7 +841,61 @@ function runRound(main, config, onRestart) {
       detected: meta.detected || (meta.source === "typing" ? input : ""),
       mode: current.mode,
       acceptance,
+      speechRetry,
     });
+  }
+
+  /**
+   * Macht einen falsch gespeicherten Spracheingabe-Versuch rückgängig, damit
+   * das Kind sofort erneut sprechen kann (z. B. bei Erkennungsfehlern).
+   */
+  async function retrySpeech(attempt, card) {
+    if (!attempt || !state.alive) return;
+    if (card?.dataset.retrying === "true") return;
+    if (card) card.dataset.retrying = "true";
+    card?.querySelectorAll('[data-action="retry-speech"], [data-action="retry-speech-inline"]').forEach((button) => {
+      button.disabled = true;
+    });
+
+    try {
+      await attempt.recordPromise;
+      await learner.restoreProgress(attempt.word.id, attempt.previousProgress);
+    } catch (error) {
+      console.error("[session] Sprachversuch konnte nicht zurückgenommen werden", error);
+      showToast("Das konnte gerade nicht gespeichert werden. Versuch es noch einmal.", { type: "error" });
+      if (card) card.dataset.retrying = "false";
+      card?.querySelectorAll('[data-action="retry-speech"], [data-action="retry-speech-inline"]').forEach((button) => {
+        button.disabled = false;
+      });
+      return;
+    }
+
+    if (!state.alive) return;
+
+    state.attempts = Math.max(0, state.attempts - 1);
+    state.attemptsByWord.set(attempt.word.id, attempt.previousAttempts);
+    const wrongCount = state.wrongByWord.get(attempt.word.id) || 0;
+    if (wrongCount <= 1) state.wrongByWord.delete(attempt.word.id);
+    else state.wrongByWord.set(attempt.word.id, wrongCount - 1);
+
+    if (attempt.queuedEntry) {
+      const queuedIndex = state.queue.indexOf(attempt.queuedEntry);
+      if (queuedIndex !== -1) state.queue.splice(queuedIndex, 1);
+    }
+
+    state.streak = attempt.streakBefore;
+    state.answered = false;
+    if (attempt.firstAttempt) state.firstPassDone.delete(attempt.word.id);
+    updateProgress();
+
+    card?.remove();
+    const mic = stage.querySelector('[data-action="mic"]');
+    const label = stage.querySelector("#mic-label");
+    const heard = stage.querySelector("#heard-box");
+    if (label) label.textContent = "Tippe zum Sprechen";
+    if (heard) heard.textContent = "Okay, versuch es noch einmal …";
+    mic?.focus({ preventScroll: true });
+    showToast("Okay, versuch es noch einmal!", { type: "info", iconName: "mic" });
   }
 
   /**
@@ -908,7 +978,7 @@ function runRound(main, config, onRestart) {
     setTimeout(() => node.remove(), 1200);
   }
 
-  function renderFeedback({ word, correct, gained, detected, mode, accepted = false, acceptance = null }) {
+  function renderFeedback({ word, correct, gained, detected, mode, accepted = false, acceptance = null, speechRetry = null }) {
     const title = correct ? randomLine(MASCOT_LINES.correct) : randomLine(MASCOT_LINES.wrong);
     const alternatives = (word.alternatives || []).filter(Boolean);
     const alternativesLine = alternatives.length
@@ -922,6 +992,18 @@ function runRound(main, config, onRestart) {
           <p class="small mb-1">Die Erkennung lag vielleicht daneben. War deine Antwort richtig?</p>
           <button type="button" class="btn btn-soft btn-small" data-action="accept-correct">
             ${icon("check")} Dennoch als richtig werten
+          </button>
+        </div>`
+      : "";
+
+    // Erkennungsfehler bei Spracheingabe: sofortiger neuer Versuch ohne
+    // Fortschritts-Penalty, weil nicht klar ist, ob das Kind falsch lag.
+    const speechRetryBlock = speechRetry
+      ? `
+        <div class="feedback-accept">
+          <p class="small mb-1">Nicht richtig erkannt? Du kannst es direkt nochmal sagen.</p>
+          <button type="button" class="btn btn-soft btn-small" data-action="retry-speech">
+            ${icon("mic")} Nochmal sprechen
           </button>
         </div>`
       : "";
@@ -949,11 +1031,13 @@ function runRound(main, config, onRestart) {
       </div>
       ${detected ? `<p class="detected">Erkannt: „${esc(detected)}“</p>` : ""}
       ${acceptedLine}
+      ${speechRetryBlock}
       ${acceptanceBlock}
       <div class="feedback-actions">
         <button type="button" class="btn btn-soft btn-small" data-action="speak-word">
           ${icon("speaker")} Nochmal hören
         </button>
+        ${speechRetry ? `<button type="button" class="btn-link" data-action="retry-speech-inline">${icon("mic")} Nochmal sprechen</button>` : ""}
         ${!correct ? `<button type="button" class="btn-link" data-action="show-typing">${icon("keyboard")} Tippen üben</button>` : ""}
         <button type="button" class="btn btn-primary" data-action="next">
           Weiter ${icon("forward")}
@@ -964,6 +1048,9 @@ function runRound(main, config, onRestart) {
     card.querySelector('[data-action="speak-word"]')?.addEventListener("click", () => speakWord(word.en));
     card.querySelector('[data-action="accept-correct"]')?.addEventListener("click", () => {
       acceptAnswer(acceptance, card);
+    });
+    card.querySelectorAll('[data-action="retry-speech"], [data-action="retry-speech-inline"]').forEach((button) => {
+      button.addEventListener("click", () => retrySpeech(speechRetry, card));
     });
     card.querySelector('[data-action="show-typing"]')?.addEventListener("click", () => {
       // Nach einer falschen Antwort direkt noch einmal tippen.
@@ -1137,9 +1224,21 @@ function runRound(main, config, onRestart) {
             ${icon("forward")}
           </button>`);
         extra.innerHTML = parts.join("");
-        extra.querySelector('[data-action="wheel"]')?.addEventListener("click", () => {
+        const wheelButton = extra.querySelector('[data-action="wheel"]');
+        wheelButton?.addEventListener("click", async () => {
+          // Nur einmal pro Runde drehen – der Bonus wurde schon beim Speichern gutgeschrieben.
+          if (!wheelButton || wheelButton.disabled) return;
+          wheelButton.disabled = true;
+          wheelButton.setAttribute("aria-disabled", "true");
           sfx.click();
-          showWheel(wheelReward);
+          try {
+            await showWheel(wheelReward);
+          } finally {
+            if (!state.alive) return;
+            wheelButton.classList.add("is-opened");
+            wheelButton.innerHTML = `<span class="wheel-card-icon" aria-hidden="true">${esc(wheelReward.icon)}</span>
+              <span><strong>Überraschung geöffnet</strong><small>${esc(wheelReward.label)} – ${esc(wheelReward.message)}</small></span>`;
+          }
         });
       })
       .catch((error) => {

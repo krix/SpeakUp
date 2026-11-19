@@ -262,23 +262,21 @@ export function createSpeechRecognizer({
     }
   }, startTimeoutMs);
 
-  const liveTrack = microphoneStream?.getAudioTracks?.().find((track) => track.readyState === "live");
+  // Die Vorab-Abfrage hat die Mikrofonberechtigung innerhalb der Nutzer-
+  // Geste gesichert. Den eigenen Stream wieder freigeben, bevor die
+  // Spracherkennung ihren eigenen Audiozugriff öffnet – zwei parallele
+  // Aufnahmen können den Start auf manchen Browsern stören.
+  if (microphoneStream) {
+    stopMicrophoneStream(microphoneStream);
+    microphoneStream = null;
+  }
+
   try {
-    // Neuere Browser können direkt auf den bereits geöffneten Track
-    // lauschen. Ältere ignorieren das Argument oder nehmen den Standard-
-    // Mikrofon-Stream – dann bleibt getUserMedia trotzdem als Vorabfrage.
-    if (liveTrack) recognition.start(liveTrack);
-    else recognition.start();
+    // Standard-Aufruf ohne Track-Argument: am zuverlässigsten über Browser
+    // hinweg.
+    recognition.start();
   } catch {
-    if (liveTrack) {
-      try {
-        recognition.start();
-      } catch {
-        finish(rejectFn, new SpeechError("start-failed"));
-      }
-    } else {
-      finish(rejectFn, new SpeechError("start-failed"));
-    }
+    finish(rejectFn, new SpeechError("start-failed"));
   }
 
   return {
