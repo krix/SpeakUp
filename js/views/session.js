@@ -523,54 +523,77 @@ function runRound(main, config, onRestart) {
       let microphone = null;
       let recognizer = null;
       try {
-        // Berechtigung und Mikrofon-Track schon jetzt holen, damit die
-        // Erkennung nicht auf eine offene Browser-Abfrage wartet.
+        // Mikrofonberechtigung in der Nutzer-Geste sichern und Audio
+        // "aufwecken". Der Probe-Stream wird gleich wieder freigegeben,
+        // damit die Spracherkennung exklusiv darauf zugreifen kann.
         microphone = await requestMicrophoneStream();
         if (!state.alive || state.answered) {
           stopMicrophoneStream(microphone);
           return;
         }
-
-        recognizer = createSpeechRecognizer({
-          lang: "en-US",
-          timeoutMs: 12000,
-          stream: microphone,
-          onStart: () => {
-            if (state.alive && !state.answered) setMicState("listening");
-          },
-          onInterim: (text) => {
-            if (heard && state.alive) heard.textContent = text;
-          },
-        });
-        state.recognizer = recognizer;
-        microphone = null; // Der Recognizer gibt den Stream selbst frei.
-
-        const result = await recognizer.promise;
+        stopMicrophoneStream(microphone);
+        microphone = null;
+        // Kurze Pause, damit das Gerät nach dem Probe-Stream wirklich frei
+        // ist, bevor die Spracherkennung ihren eigenen Zugriff öffnet.
+        await new Promise((r) => setTimeout(r, 150));
         if (!state.alive || state.answered) return;
-        if (heard) heard.textContent = result.transcript || "…";
-        // Alle Alternativen prüfen – die Erkennung liefert oft gute Zweitvorschläge.
-        const alternatives = result.alternatives?.length ? result.alternatives : [result.transcript];
-        let match = null;
-        for (const candidate of alternatives) {
-          const check = checkAnswer(candidate, word);
-          if (check.correct) {
-            match = { candidate, check };
-            break;
+
+        let lastError = null;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          if (!state.alive || state.answered) return;
+          recognizer = createSpeechRecognizer({
+            lang: "en-US",
+            timeoutMs: 12000,
+            onStart: () => {
+              if (state.alive && !state.answered) setMicState("listening");
+            },
+            onInterim: (text) => {
+              if (heard && state.alive) heard.textContent = text;
+            },
+          });
+          state.recognizer = recognizer;
+
+          try {
+            const result = await recognizer.promise;
+            if (!state.alive || state.answered) return;
+            if (heard) heard.textContent = result.transcript || "…";
+            // Alle Alternativen prüfen – die Erkennung liefert oft gute Zweitvorschläge.
+            const alternatives = result.alternatives?.length ? result.alternatives : [result.transcript];
+            let match = null;
+            for (const candidate of alternatives) {
+              const check = checkAnswer(candidate, word);
+              if (check.correct) {
+                match = { candidate, check };
+                break;
+              }
+            }
+            if (match) {
+              submitAnswer(match.candidate, true, { source: "speech" });
+            } else {
+              submitAnswer(result.transcript || "", false, {
+                source: "speech",
+                detected: result.transcript,
+                candidates: alternatives,
+              });
+            }
+            return;
+          } catch (error) {
+            if (error?.code === "aborted") throw error;
+            lastError = error;
+            // Der erste Start scheitert auf manchen Browsern gelegentlich.
+            // Ein automatischer Neustart entspricht "aus/an/aus/an" und
+            // behebt das zuverlässig, ohne die Nutzerin zu verwirren.
+            if (attempt === 0 && error?.code === "start-failed" && state.alive && !state.answered) {
+              await new Promise((r) => setTimeout(r, 220));
+              continue;
+            }
+            throw error;
           }
         }
-        if (match) {
-          submitAnswer(match.candidate, true, { source: "speech" });
-        } else {
-          submitAnswer(result.transcript || "", false, {
-            source: "speech",
-            detected: result.transcript,
-            candidates: alternatives,
-          });
-        }
+        if (lastError) throw lastError;
       } catch (error) {
         if (!state.alive || state.answered) return;
         if (error?.code === "aborted") return;
-        setMicState("idle");
         if (heard) heard.textContent = error?.message || "Das hat nicht geklappt.";
         showToast(error?.message || "Das hat nicht geklappt.", { type: "warn", iconName: "mic" });
         if (
@@ -582,7 +605,9 @@ function runRound(main, config, onRestart) {
         }
       } finally {
         stopMicrophoneStream(microphone);
-        if (state.alive && !state.answered) setMicState("idle");
+        // Immer zurück auf "bereit", damit der Button nie im aktiven
+        // Zustand hängen bleibt (auch nach einem abgeschlossenen Versuch).
+        if (state.alive) setMicState("idle");
         if (recognizer && state.recognizer === recognizer) state.recognizer = null;
       }
     };
@@ -884,18 +909,13 @@ function runRound(main, config, onRestart) {
     }
 
     state.streak = attempt.streakBefore;
-    state.answered = false;
     if (attempt.firstAttempt) state.firstPassDone.delete(attempt.word.id);
     updateProgress();
 
-    card?.remove();
-    const mic = stage.querySelector('[data-action="mic"]');
-    const label = stage.querySelector("#mic-label");
-    const heard = stage.querySelector("#heard-box");
-    if (label) label.textContent = "Tippe zum Sprechen";
-    if (heard) heard.textContent = "Okay, versuch es noch einmal …";
-    mic?.focus({ preventScroll: true });
+    // Frage komplett neu aufbauen: frische Listener und ein sauberer
+    // Mikrofon-Status (kein "hängen gebliebenes" Zuhören).
     showToast("Okay, versuch es noch einmal!", { type: "info", iconName: "mic" });
+    showQuestion();
   }
 
   /**
