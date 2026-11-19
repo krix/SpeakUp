@@ -22,6 +22,10 @@ import {
   stopMicrophoneStream,
 } from "../core/speech.js";
 import { recognizeHandwriting } from "../core/handwriting.js";
+import {
+  createGeminiSpeechRecognizer,
+  isGeminiSpeechSupported,
+} from "../core/speech-cloud.js";
 import { DrawingPad } from "../ui/canvas.js";
 import {
   icon,
@@ -330,6 +334,7 @@ function runRound(main, config, onRestart) {
     const example = renderExample(word);
 
     if (mode === "speak") {
+      const usingGeminiSpeech = (learner.getSettings().speechProvider || "browser") === "gemini";
       return `
         <div class="question-card" tabindex="-1" aria-labelledby="question-title">
           ${badge}
@@ -342,7 +347,11 @@ function runRound(main, config, onRestart) {
           </div>
           ${example}
           <p class="instruction">Tippe auf das Mikrofon und sprich <strong>deutlich</strong>.
-            Du kannst auch lieber tippen.</p>
+            ${
+              usingGeminiSpeech
+                ? "Tippe danach noch einmal, wenn du fertig bist – dann wird dein Wort erkannt (Gemini). Du kannst auch lieber tippen."
+                : "Du kannst auch lieber tippen."
+            }</p>
 
           <div class="speak-area">
             <button type="button" class="mic-btn" data-action="mic" aria-label="Mikrofon starten und Wort sprechen">
@@ -509,7 +518,20 @@ function runRound(main, config, onRestart) {
         });
         return;
       }
-      if (!isSpeechSupported()) {
+
+      const currentSettings = learner.getSettings();
+      const useGeminiSpeech = (currentSettings.speechProvider || "browser") === "gemini";
+
+      if (useGeminiSpeech) {
+        if (!isGeminiSpeechSupported()) {
+          showToast("Audio-Aufnahme wird in diesem Browser nicht unterstützt. Du kannst stattdessen tippen.", {
+            type: "warn",
+            iconName: "info",
+          });
+          showTyping();
+          return;
+        }
+      } else if (!isSpeechSupported()) {
         const hint = speechSupportHint();
         if (hint) showToast(hint, { type: "warn", iconName: "info" });
         showTyping();
@@ -523,18 +545,60 @@ function runRound(main, config, onRestart) {
       let microphone = null;
       let recognizer = null;
       try {
-        // Mikrofonberechtigung in der Nutzer-Geste sichern und Audio
-        // "aufwecken". Der Probe-Stream wird gleich wieder freigegeben,
-        // damit die Spracherkennung exklusiv darauf zugreifen kann.
+        // Mikrofonberechtigung in der Nutzer-Geste sichern und Audio "aufwecken".
         microphone = await requestMicrophoneStream();
         if (!state.alive || state.answered) {
           stopMicrophoneStream(microphone);
           return;
         }
+
+        if (useGeminiSpeech) {
+          // Gemini-Alternative: lokal aufnehmen, dann Audio zur KI senden.
+          recognizer = createGeminiSpeechRecognizer({
+            stream: microphone,
+            model: currentSettings.speechModel,
+            timeoutMs: 9000,
+            onStart: () => {
+              if (state.alive && !state.answered) setMicState("listening");
+            },
+            onStopRecording: () => {
+              if (!state.alive || state.answered) return;
+              if (label) label.textContent = "Ich erkenne dein Wort …";
+              if (heard) heard.textContent = "Einen Moment …";
+            },
+          });
+          microphone = null; // Recorder/Erkenner gibt den Stream selbst frei.
+          state.recognizer = recognizer;
+
+          const result = await recognizer.promise;
+          if (!state.alive || state.answered) return;
+          if (heard) heard.textContent = result.transcript || "…";
+          const alternatives = result.alternatives?.length ? result.alternatives : [result.transcript];
+          let match = null;
+          for (const candidate of alternatives) {
+            const check = checkAnswer(candidate, word);
+            if (check.correct) {
+              match = { candidate, check };
+              break;
+            }
+          }
+          if (match) {
+            submitAnswer(match.candidate, true, { source: "speech" });
+          } else {
+            submitAnswer(result.transcript || "", false, {
+              source: "speech",
+              detected: result.transcript,
+              candidates: alternatives,
+            });
+          }
+          return;
+        }
+
+        // Browser-Spracherkennung (Standard): Probe-Stream freigeben, damit die
+        // Erkennung exklusiv auf das Mikrofon zugreifen kann.
         stopMicrophoneStream(microphone);
         microphone = null;
-        // Kurze Pause, damit das Gerät nach dem Probe-Stream wirklich frei
-        // ist, bevor die Spracherkennung ihren eigenen Zugriff öffnet.
+        // Kurze Pause, damit das Gerät nach dem Probe-Stream wirklich frei ist.
         await new Promise((r) => setTimeout(r, 150));
         if (!state.alive || state.answered) return;
 
@@ -581,8 +645,7 @@ function runRound(main, config, onRestart) {
             if (error?.code === "aborted") throw error;
             lastError = error;
             // Der erste Start scheitert auf manchen Browsern gelegentlich.
-            // Ein automatischer Neustart entspricht "aus/an/aus/an" und
-            // behebt das zuverlässig, ohne die Nutzerin zu verwirren.
+            // Ein automatischer Neustart entspricht "aus/an/aus/an".
             if (attempt === 0 && error?.code === "start-failed" && state.alive && !state.answered) {
               await new Promise((r) => setTimeout(r, 220));
               continue;
@@ -597,9 +660,17 @@ function runRound(main, config, onRestart) {
         if (heard) heard.textContent = error?.message || "Das hat nicht geklappt.";
         showToast(error?.message || "Das hat nicht geklappt.", { type: "warn", iconName: "mic" });
         if (
-          ["unsupported", "not-allowed", "service-not-allowed", "insecure", "start-failed", "network", "audio-capture"].includes(
-            error?.code
-          )
+          [
+            "unsupported",
+            "not-allowed",
+            "service-not-allowed",
+            "insecure",
+            "start-failed",
+            "network",
+            "audio-capture",
+            "auth",
+            "rate-limit",
+          ].includes(error?.code)
         ) {
           showTyping();
         }

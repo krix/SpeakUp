@@ -33,7 +33,7 @@ Sprechen, hören, mit dem Stift schreiben oder tippen: SpeakUp kombiniert vier L
 ### Lernen
 
 - **Vier Modi**
-  - **Sprechen** – deutsche Vorgabe, englische Antwort ins Mikrofon (Web Speech API, `en-US`).
+  - **Sprechen** – deutsche Vorgabe, englische Antwort ins Mikrofon. Standard: Browser-Spracherkennung (Web Speech API, `en-US`). Optional als Alternative: **Google Gemini** (Audio wird lokal aufgenommen und nach dem Stoppen einmalig zur Erkennung gesendet, kein Live-Zwischenergebnis).
   - **Hören & Schreiben** – englisches Wort wird vorgelesen, Antwort mit Stift oder Tastatur.
   - **Schreiben** – deutsche Vorgabe, englische Antwort handschriftlich oder getippt.
   - **Mix** – die Modi wechseln innerhalb einer Runde.
@@ -140,7 +140,8 @@ SpeakUp/
 │  │  ├─ photo-import.js   Foto → OCR → Vokabelvorschläge
 │  │  ├─ profiles.js       mehrere Benutzerprofile mit eigenen Daten
 │  │  ├─ secrets.js        lokale API-Schlüssel (nie im Backup)
-│  │  ├─ speech.js         Web-Speech-Erkennung
+│  │  ├─ speech.js         Web-Speech-Erkennung (Browser)
+│  │  ├─ speech-cloud.js   Spracheingabe über Gemini (Audio → Transkript)
 │  │  ├─ transfer.js       Import, Export, Backup, Restore
 │  │  └─ tts.js            Sprachausgabe
 │  ├─ ui/
@@ -179,7 +180,8 @@ SpeakUp/
 - **`profiles.js`** verwaltet mehrere Benutzerprofile. Die aktive Runde nutzt weiterhin die bekannten Speicher-Schlüssel; beim Wechseln wird ein vollständiger Schnappschuss gesichert und der des Zielprofils eingespielt.
 - **`drive.js`** spricht die Google-Drive-API direkt aus dem Browser an. Die OAuth-Client-ID liegt lokal, der Access-Token nur im Arbeitsspeicher der Sitzung.
 - **`transfer.js`** bündelt Import, Export und Backup; die Ansichten enthalten keine Dateiformat-Logik. Backups enthalten alle Profile, aber weiterhin keine Einwilligung und keine API-Schlüssel.
-- Die Handschrifterkennung ist über `setHandwritingProvider()` austauschbar. Standard ist Google Input Tools; im Elternbereich lassen sich Google Cloud Vision und Gemini als genauere Cloud-Anbieter wählen.
+- Die Spracheingabe ist über die Einstellung `speechProvider` austauschbar: `browser` (Web Speech API, Standard) oder `gemini` (lokale Audio-Aufnahme mit `MediaRecorder`, Transkription über Gemini). Gemini benötigt Internet, Einwilligung und einen API-Schlüssel und liefert erst nach dem Stoppen ein Ergebnis (kein Live-Zwischenergebnis).
+- Die Handschrifterkennung ist über `setHandwritingProvider()` austauschbar. Standard ist Google Input Tools; im Elternbereich lassen sich Google Cloud Vision und Gemini als genauere Cloud-Anbieter wählen. Derselbe Gemini-Schlüssel kann für Handschrift, Foto-Import und Spracheingabe verwendet werden (separates Sprach-Modell einstellbar).
 
 ---
 
@@ -306,7 +308,7 @@ Der Elternbereich ist über eine zweistellige Multiplikationsaufgabe geschützt.
 | **Import** | CSV aus Datei, Einfügen oder URL; **Foto-Import** mit Vorschlägen und Auswahl; Vorschau; Zielthema oder neues Thema; Importmodus. |
 | **Sichern** | Lokales JSON-Backup aller Profile als Alternative zu Google Drive erstellen/wiederherstellen, CSV pro Thema exportieren, leere Vorlage laden, Standardlisten wiederherstellen, Fortschritt oder alle Daten löschen. |
 | **Fortschritt** | Statistik pro Wort, Sortierung nach Fehlern/Box/Quote, Box-Verteilung, Rundenverlauf, Fortschritt einzelner Wörter löschen. |
-| **Einstellungen** | Benutzerprofile anlegen/umbenennen/löschen, Google-Drive-Client-ID und manuelle Synchronisierung, Toneffekte, automatisches Vorlesen, Handschrift-Anbieter inkl. API-Schlüssel, Vorlese-Geschwindigkeit, Online-Einwilligung, Installation, Speicherbelegung. |
+| **Einstellungen** | Benutzerprofile anlegen/umbenennen/löschen, Google-Drive-Client-ID und manuelle Synchronisierung, Toneffekte, automatisches Vorlesen, Handschrift- und Spracheingabe-Anbieter inkl. Gemini-API-Schlüssel/Modelle, Vorlese-Geschwindigkeit, Online-Einwilligung, Installation, Speicherbelegung. |
 
 Die Entsperrung gilt für die aktuelle Browser-Sitzung (`sessionStorage`). Beim Schließen des Tabs wird sie zurückgesetzt.
 
@@ -494,13 +496,26 @@ Handschrift im Elternbereich auf **Aus** stellen: Kinder tippen dann. Für einen
 - Beim Anbieter einschränken: nur die jeweilige API und möglichst den HTTP-Referrer.
 - **Entfernen** löscht den Schlüssel sofort; die Erkennung fällt auf Tippen zurück.
 
+## Spracheingabe: Anbieter einrichten
+
+Die Spracheingabe ist im Elternbereich unter **Einstellungen → Spracheingabe** wählbar:
+
+| Anbieter | Einrichtung | Verhalten |
+|---|---|---|
+| **Browser-Spracherkennung (Standard)** | keine, Browser-Unterstützung nötig | Live-Erkennung über die Web Speech API; Aufnahme geht an den Dienst des Browser-Herstellers. |
+| **Google Gemini (Audio → KI, online)** | Gemini-API-Schlüssel (kann mit Handschrift/Foto geteilt werden), Modell einstellbar | Sprache wird lokal aufgenommen; nach dem Stoppen wird die Audiodatei einmalig an Gemini zur Transkription gesendet. Kein Live-Zwischenergebnis, benötigt Internet und Einwilligung. |
+
+- Der Gemini-Schlüssel liegt nur lokal und getrennt vom Backup (wie bei der Handschrift). Im kostenlosen Gemini-Tarif dürfen Eingaben zum Produkttraining verwendet werden.
+- Der Verbindungstest prüft den Gemini-Schlüssel/Modellzugang. Für die reine Audio-Erkennung muss das gewählte Modell Audio-Eingaben verstehen.
+- Ohne passende Unterstützung, ohne Internet/Einwilligung oder bei Fehlern kann jederzeit getippt werden.
+
 ---
 
 ## Datenschutz
 
 - **Keine SpeakUp-Konten, keine Werbung, keine Tracker, keine Analytics.**
 - Lernstände, eigene Wörter, Profile und Einstellungen bleiben in IndexedDB auf dem Gerät (Fallback: localStorage). Optional können Eltern alle Profile manuell in den eigenen Google-Drive-App-Ordner sichern; ohne diese Einrichtung verlässt nichts die App.
-- **Spracherkennung:** Die Web Speech API sendet die Aufnahme an den Erkennungsdienst des Browser-Herstellers (bei Chrome typischerweise Google). SpeakUp speichert keine Audiodaten.
+- **Spracherkennung (Standard):** Die Web Speech API sendet die Aufnahme an den Erkennungsdienst des Browser-Herstellers (bei Chrome typischerweise Google). **Alternative Gemini:** Die Sprache wird lokal aufgenommen und nach dem Stoppen einmalig an Google Gemini zur Transkription gesendet (kein Live-Zwischenergebnis), benötigt einen eigenen API-Schlüssel. Im kostenlosen Gemini-Tarif dürfen Eingaben zum Produkttraining verwendet werden. SpeakUp speichert keine Audiodaten.
 - **Handschrift:** Die Striche werden lokal als PNG gerendert und an den im Elternbereich gewählten Dienst gesendet (Standard: Google Input Tools; optional Google Cloud Vision oder Gemini). SpeakUp speichert das Bild nicht. Ohne Einwilligung oder bei „Aus“ wird nichts gesendet.
 - **Foto-Import:** Das Foto wird im Browser verkleinert und einmalig an Google Cloud Vision oder Gemini gesendet. Es wird weder in der App noch im Backup gespeichert. Die Vorschläge bleiben nur im Arbeitsspeicher, bis der Elternbereich verlassen oder der Import verworfen wird. Bei Gemini im kostenlosen Tarif darf Google die eingesendeten Bilder zum Produkttraining verwenden.
 - **Vorlesen:** `SpeechSynthesis` nutzt die Stimmen des Geräts. Wenn eine lokale englische Stimme vorhanden ist, werden keine Daten gesendet.
@@ -514,11 +529,11 @@ Handschrift im Elternbereich auf **Aus** stellen: Kinder tippen dann. Für einen
 
 ## Grenzen und bekannte Einschränkungen
 
-- **Web Speech API:** Nicht in jedem Browser verfügbar. Firefox unterstützt sie nicht; Safari/iOS nur eingeschränkt und teils mit Siri-/Diktat-Abhängigkeit. Die App fällt auf Tippen zurück.
-- **Mikrofon:** Benötigt eine sichere Umgebung (HTTPS/localhost) und eine Berechtigung. Beim Klick holt SpeakUp die Berechtigung und wartet auf das `start`-Event der Web Speech API; erst dann erscheint „Ich höre zu“. Der Antwort-Timeout startet ebenfalls erst dann. Wurde das Mikrofon früher abgelehnt, muss es in den Browser-Einstellungen erlaubt und die Seite neu geladen werden. Verweigerte Berechtigungen werden kindgerecht erklärt.
+- **Web Speech API:** Nicht in jedem Browser verfügbar. Firefox unterstützt sie nicht; Safari/iOS nur eingeschränkt und teils mit Siri-/Diktat-Abhängigkeit. Als Alternative kann im Elternbereich die Spracheingabe über Gemini gewählt werden (lokale Audio-Aufnahme, Transkription nach dem Stoppen, eigener API-Schlüssel, kein Live-Zwischenergebnis). Sonst fällt die App auf Tippen zurück.
+- **Mikrofon:** Benötigt eine sichere Umgebung (HTTPS/localhost) und eine Berechtigung. Beim Klick holt SpeakUp die Berechtigung (kurzer Probezugriff) und startet dann die gewählte Erkennung. Bei der Browser-Spracherkennung wartet SpeakUp auf das `start`-Event; erst dann erscheint „Ich höre zu“. Bei Gemini wird lokal aufgenommen und erst nach dem Stoppen transkribiert (kein Live-Zwischenergebnis). Wurde das Mikrofon früher abgelehnt, muss es in den Browser-Einstellungen erlaubt und die Seite neu geladen werden. Verweigerte Berechtigungen werden kindgerecht erklärt.
 - **Handschrifterkennung:** Google Input Tools ist ein **nicht offiziell dokumentierter** Dienst. Er kann sich ändern, rate-limitieren oder ausfallen; der öffentliche Endpunkt liefert für viele Eingaben keine brauchbaren Wörter. Deshalb gibt es im Elternbereich zwei optionalen Cloud-Anbieter: **Google Cloud Vision** (1.000 Einheiten/Monat kostenlos, sehr genaue Handschrift-OCR) und **Gemini** (KI mit kostenlosem Kontingent, kann sich verlesen). Beide brauchen einen eigenen API-Schlüssel und Internet. SpeakUp verwirft unbrauchbare Kandidaten, zeigt einen verständlichen Hinweis und bietet sofort das Tippen an. Bei kleinen Erkennungsfehlern kann die Antwort außerdem manuell als richtig gewertet werden; der vorherige falsche Versuch wird dabei zurückgenommen. Der Provider ist über `setHandwritingProvider()` austauschbar; ein lokales Modell ist als Ausbau geplant.
 - **Sprachausgabe:** Die Qualität hängt von den installierten Stimmen ab. Fehlt eine englische Stimme, klingt die Aussprache deutsch. Auf iOS muss die Ausgabe teilweise durch eine Nutzergeste freigeschaltet werden.
-- **Offline:** Der erste Start muss online erfolgen, damit App-Shell und Vokabeln geladen werden können. Danach funktioniert die App offline. Spracherkennung und Handschrift benötigen weiterhin Internet.
+- **Offline:** Der erste Start muss online erfolgen, damit App-Shell und Vokabeln geladen werden können. Danach funktioniert die App offline. Spracherkennung (Browser und Gemini) und Handschrift benötigen weiterhin Internet.
 - **Manuelle Drive-Synchronisierung:** Daten liegen standardmäßig nur auf einem Gerät/Browser. Die optionale Google-Drive-Sicherung braucht eine selbst erstellte OAuth-Client-ID, funktioniert nur auf Knopfdruck und speichert den Token nicht dauerhaft. Bei gleicher Profil-ID oder gleichem Namen gewinnt beim Laden die Cloud-Version; weitere Geräte werden nicht automatisch abgeglichen.
 - **CSV:** Kein Import von Audio. Excel kann Emojis oder Sonderzeichen je nach Version verändern; UTF-8 wählen.
 - **Foto-Import:** Braucht Internet und einen eingerichteten Cloud-Schlüssel. Handschriftliche Listen und schräge Fotos werden schlechter erkannt als gedruckte, gerade Seiten. Erkannte Paare sind Vorschläge und müssen vor dem Import geprüft werden; die App übersetzt oder ergänzt keine fehlenden Wörter.

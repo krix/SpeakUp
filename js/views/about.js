@@ -92,11 +92,14 @@ export function renderAbout(main) {
             <span class="about-fact-icon">${icon("mic")}</span>
             <div>
               <strong>Nur mit deiner Erlaubnis online</strong>
-              <p>Sprachaufnahmen gehen zur Erkennung an den Dienst deines Browsers
-              (bei Chrome z. B. Google). Schreibstriche werden als Bild an den
-              eingestellten Dienst geschickt (Standard: Google Input Tools,
-              optional Google Cloud Vision oder Gemini). Ein Foto für den
-              Vokabel-Import wird nur zum Lesen gesendet und nicht gespeichert.
+              <p>Für Sprache nutzt ${esc(APP_NAME)} standardmäßig die Browser-Spracherkennung
+              (Aufnahme geht an den Dienst des Browser-Herstellers, z. B. Google bei Chrome).
+              Alternativ können Eltern im Elternbereich <strong>Google Gemini</strong> für die
+              Spracheingabe wählen: dann wird die Aufnahme lokal aufgezeichnet und nach dem
+              Stoppen einmalig an Gemini zur Erkennung gesendet (kein Live-Zwischenergebnis).
+              Schreibstriche werden als Bild an den eingestellten Dienst geschickt
+              (Standard: Google Input Tools, optional Google Cloud Vision oder Gemini).
+              Ein Foto für den Vokabel-Import wird nur zum Lesen gesendet und nicht gespeichert.
               ${esc(APP_NAME)} speichert nichts davon dauerhaft. Ohne Erlaubnis lernst du mit Tippen.</p>
             </div>
           </div>
@@ -146,7 +149,7 @@ export function renderAbout(main) {
         <div class="faq-list">
           <details class="faq-item">
             <summary>Das Mikrofon funktioniert nicht.</summary>
-            <p>Spracherkennung braucht eine sichere Verbindung (HTTPS oder
+            <p>Die Browser-Spracherkennung braucht eine sichere Verbindung (HTTPS oder
             <code>localhost</code>) und einen Browser, der die Web Speech API
             unterstützt – zum Beispiel Chrome, Edge oder Safari. Firefox kann
             es nicht. Auf dem iPhone ist die Erkennung eingeschränkt und
@@ -154,7 +157,10 @@ export function renderAbout(main) {
             zuerst die Berechtigung und wartet auf das „start“-Signal – sprich
             erst, wenn „Ich höre zu“ erscheint. Wurde die Berechtigung früher
             abgelehnt, erlaube das Mikrofon in den Browser-Einstellungen und
-            lade die Seite neu. In allen Fällen kannst du tippen.</p>
+            lade die Seite neu. Als Alternative können Eltern im Elternbereich
+            die Spracheingabe über <strong>Gemini</strong> einstellen (Audio-Aufnahme,
+            Erkennung nach dem Stoppen, eigener API-Schlüssel nötig). In allen Fällen
+            kannst du tippen.</p>
           </details>
           <details class="faq-item">
             <summary>Meine Handschrift wird nicht erkannt.</summary>

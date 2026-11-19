@@ -25,7 +25,7 @@ export function showConsentModal({ firstRun = false, onDone = null } = {}) {
       <span class="consent-icon">${icon("mic")}</span>
       <div>
         <strong>🎤 Sprache</strong>
-        <p>Wenn du ins Mikrofon sprichst, schickt dein Browser die Aufnahme an den Spracherkennungsdienst des Browser-Herstellers (bei Chrome z. B. Google). SpeakUp selbst speichert keine Audioaufnahmen.</p>
+        <p>Wenn du ins Mikrofon sprichst, wird deine Antwort erkannt. Standardmäßig nutzt dein Browser dafür den Spracherkennungsdienst des Browser-Herstellers (bei Chrome z. B. Google). Eltern können im Elternbereich alternativ Google Gemini wählen – dann wird eine Aufnahme nach dem Sprechen einmalig zur Erkennung an Gemini gesendet (kein Live-Zwischenergebnis). SpeakUp selbst speichert keine Audioaufnahmen.</p>
       </div>
     </div>
 

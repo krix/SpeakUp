@@ -62,6 +62,18 @@ const ERROR_MESSAGES = {
     message: "Ich habe zu lange gewartet. Versuch es noch einmal!",
     hint: "Der Erkennungsdienst hat nicht geantwortet.",
   },
+  auth: {
+    message: "Für die Spracheingabe mit Gemini fehlt ein gültiger Schlüssel. Ein Erwachsener kann ihn im Elternbereich prüfen.",
+    hint: "Elternbereich → Einstellungen → Spracheingabe.",
+  },
+  "rate-limit": {
+    message: "Die Spracherkennung ist gerade überlastet oder das Limit ist erreicht. Versuch es später noch einmal oder tippe dein Wort.",
+    hint: "Bei kostenlosen Kontingenten kann es Tages- oder Minutenlimits geben.",
+  },
+  "invalid-response": {
+    message: "Die Spracherkennung hat eine unverständliche Antwort geliefert. Versuch es noch einmal.",
+    hint: "",
+  },
   unsupported: {
     message: "Dein Browser kann keine Sprache erkennen. Kein Problem – tippe dein Wort einfach ein.",
     hint: "Firefox unterstützt die Web Speech API nicht. Chrome, Edge oder Safari verwenden.",

@@ -1883,11 +1883,11 @@ export function renderParent(main) {
           isVision
             ? ""
             : `<div class="field">
-                 <label class="small bold" for="model-input-gemini">Modell</label>
+                 <label class="small bold" for="model-input-gemini">Gemini-Modell (Handschrift &amp; Foto)</label>
                  <input class="input" id="model-input-gemini" data-model-input="gemini" type="text"
                         spellcheck="false" autocomplete="off"
                         value="${esc(settings.handwritingModel || "gemini-3.5-flash-lite")}">
-                 <p class="tiny muted mb-0">Muss ein Gemini-Modell sein, das Bilder versteht. Die Änderung wird beim Verlassen des Feldes gespeichert.</p>
+                 <p class="tiny muted mb-0">Muss ein Gemini-Modell sein, das Bilder versteht. Wird beim Verlassen des Feldes gespeichert. (Spracheingabe nutzt ggf. ein eigenes Modell.)</p>
                </div>`
         }
 
@@ -1922,17 +1922,96 @@ export function renderParent(main) {
       </div>`;
   }
 
+  function speechProviderConfigMarkup(settings) {
+    const provider = settings.speechProvider || "browser";
+    const info = PROVIDER_INFO.gemini || {};
+    if (provider !== "gemini") {
+      return `<div class="callout">
+        ${icon("mic")}
+        <div>
+          <p class="mb-1"><strong>Browser-Spracherkennung (Standard).</strong></p>
+          <p class="mb-0 small">Die Aufnahme geht zur Erkennung an den Dienst des Browser-Herstellers (z. B. Google bei Chrome). Das braucht Internet, eine sichere Verbindung und je nach Browser passende Unterstützung. In Firefox funktioniert es nicht – dann bitte tippen oder Gemini als Alternative wählen.</p>
+        </div>
+      </div>`;
+    }
+
+    return `
+      <div class="provider-config">
+        <div class="callout warn">
+          ${icon("info")}
+          <div>
+            <p class="mb-1"><strong>Gemini als Alternative zur Browser-Spracherkennung.</strong></p>
+            <p class="mb-0 small">Die Sprache wird lokal aufgenommen. Nach dem Stoppen (nochmal tippen) wird die Audiodatei einmalig an Google Gemini zur Erkennung gesendet – es gibt kein Live-Zwischenergebnis. Benötigt Internet, Einwilligung und einen Gemini-API-Schlüssel. Im kostenlosen Tarif darf Google Inhalte zum Verbessern der Produkte verwenden.</p>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="small bold" for="key-input-gemini-speech">Gemini-API-Schlüssel</label>
+          <div class="key-row">
+            <input class="input" id="key-input-gemini-speech" data-key-input="gemini" data-key-scope="speech"
+                   type="password" autocomplete="off" spellcheck="false"
+                   placeholder="Schlüssel einfügen …" aria-describedby="key-status-gemini-speech">
+            <button type="button" class="btn btn-ghost btn-small" data-key-toggle="gemini" data-key-scope="speech" aria-pressed="false">
+              ${icon("eye")} Zeigen
+            </button>
+          </div>
+          <p class="tiny muted mb-0" id="key-status-gemini-speech" data-key-status="gemini" data-key-scope="speech" role="status">wird geprüft …</p>
+        </div>
+
+        <div class="field">
+          <label class="small bold" for="model-input-gemini-speech">Gemini-Modell (Sprache)</label>
+          <input class="input" id="model-input-gemini-speech" data-model-input="gemini-speech" type="text"
+                 spellcheck="false" autocomplete="off"
+                 value="${esc(settings.speechModel || "gemini-3.5-flash-lite")}">
+          <p class="tiny muted mb-0">Muss ein Gemini-Modell sein, das Audio versteht. Wird beim Verlassen des Feldes gespeichert. Derselbe Schlüssel wie für Handschrift/Foto/Gemini kann verwendet werden.</p>
+        </div>
+
+        <div class="btn-row">
+          <button type="button" class="btn btn-small" data-key-save="gemini" data-key-scope="speech">${icon("check")} Schlüssel speichern</button>
+          <button type="button" class="btn btn-soft btn-small" data-key-test="gemini" data-key-scope="speech">${icon("refresh")} Verbindung testen</button>
+          <button type="button" class="btn btn-ghost btn-small" data-key-clear="gemini" data-key-scope="speech">${icon("trash")} Entfernen</button>
+        </div>
+
+        <details class="provider-help">
+          <summary>Einrichtung, Kosten &amp; Datenschutz</summary>
+          <ol class="small">
+            <li>In Google AI Studio einen <a href="${info.keyUrl || "https://aistudio.google.com/apikey"}" target="_blank" rel="noopener noreferrer">API-Schlüssel</a> erstellen.</li>
+            <li>Free-Tier-Limits und Preise in der <a href="${info.quotaUrl || "https://ai.google.dev/pricing"}" target="_blank" rel="noopener noreferrer">Gemini-Dokumentation</a> prüfen.</li>
+            <li>Schlüssel speichern, Modell prüfen und „Verbindung testen“ wählen.</li>
+            <li>Im kostenlosen Tarif dürfen Eingaben zum Verbessern von Google-Produkten verwendet werden. Die Aufnahme wird nur zur Erkennung gesendet und nicht von SpeakUp gespeichert.</li>
+          </ol>
+          <p class="tiny muted mb-0">
+            Der Schlüssel liegt nur auf diesem Gerät, ist für jeden mit Gerätezugriff lesbar
+            und wird <strong>nicht</strong> ins Backup geschrieben.
+          </p>
+        </details>
+      </div>`;
+  }
+
   async function hydrateProviderConfig(panel) {
     const settings = learner.getSettings();
     const provider = settings.handwritingProvider || "google-input-tools";
     if (!isCloudProvider(provider)) return;
-    const status = panel.querySelector(`[data-key-status="${provider}"]`);
+    const status = panel.querySelector(`[data-key-status="${provider}"]:not([data-key-scope="speech"])`);
     if (!status) return;
     const key = await getApiKey(provider);
     if (!status.isConnected) return;
     status.textContent = key
       ? "Ein Schlüssel ist gespeichert – nur auf diesem Gerät, nicht im Backup."
       : "Noch kein Schlüssel gespeichert – die Erkennung bleibt so lange aus.";
+    status.classList.toggle("is-ok", Boolean(key));
+  }
+
+  async function hydrateSpeechProviderConfig(panel) {
+    const settings = learner.getSettings();
+    if ((settings.speechProvider || "browser") !== "gemini") return;
+    const status = panel.querySelector('[data-key-status="gemini"][data-key-scope="speech"]');
+    if (!status) return;
+    const key = await getApiKey("gemini");
+    if (!status.isConnected) return;
+    status.textContent = key
+      ? "Ein Gemini-Schlüssel ist gespeichert – nur auf diesem Gerät, nicht im Backup."
+      : "Noch kein Gemini-Schlüssel gespeichert – die Spracheingabe mit Gemini bleibt so lange aus.";
     status.classList.toggle("is-ok", Boolean(key));
   }
 
@@ -1956,9 +2035,10 @@ export function renderParent(main) {
     });
 
     if (!isCloudProvider(provider)) return;
+    const scopeSel = ':not([data-key-scope="speech"])';
 
-    panel.querySelector(`[data-key-toggle="${provider}"]`)?.addEventListener("click", (event) => {
-      const input = panel.querySelector(`[data-key-input="${provider}"]`);
+    panel.querySelector(`[data-key-toggle="${provider}"]${scopeSel}`)?.addEventListener("click", (event) => {
+      const input = panel.querySelector(`[data-key-input="${provider}"]${scopeSel}`);
       if (!input) return;
       const show = input.type === "password";
       input.type = show ? "text" : "password";
@@ -1966,8 +2046,8 @@ export function renderParent(main) {
       event.currentTarget.innerHTML = `${icon("eye")} ${show ? "Verbergen" : "Zeigen"}`;
     });
 
-    panel.querySelector(`[data-key-save="${provider}"]`)?.addEventListener("click", async () => {
-      const input = panel.querySelector(`[data-key-input="${provider}"]`);
+    panel.querySelector(`[data-key-save="${provider}"]${scopeSel}`)?.addEventListener("click", async () => {
+      const input = panel.querySelector(`[data-key-input="${provider}"]${scopeSel}`);
       const value = input?.value.trim() || "";
       if (!value) {
         input?.focus();
@@ -1977,31 +2057,35 @@ export function renderParent(main) {
       await setApiKey(provider, value);
       input.value = "";
       await hydrateProviderConfig(panel);
+      await hydrateSpeechProviderConfig(panel);
       showToast("Schlüssel gespeichert. Er bleibt auf diesem Gerät und ist nicht im Backup.", {
         type: "success",
         iconName: "check",
       });
     });
 
-    panel.querySelector(`[data-key-clear="${provider}"]`)?.addEventListener("click", async () => {
+    panel.querySelector(`[data-key-clear="${provider}"]${scopeSel}`)?.addEventListener("click", async () => {
       const confirmed = await confirmDialog({
         title: "Schlüssel entfernen?",
-        message: "Die Handschrifterkennung ist danach aus, bis ein neuer Schlüssel gespeichert wird. Tippen funktioniert weiterhin.",
+        message: provider === "gemini"
+          ? "Spracheingabe mit Gemini, Handschrift mit Gemini und Foto-Import mit Gemini funktionieren danach nicht mehr, bis ein neuer Schlüssel gespeichert wird. Tippen funktioniert weiterhin."
+          : "Die Handschrifterkennung ist danach aus, bis ein neuer Schlüssel gespeichert wird. Tippen funktioniert weiterhin.",
         confirmLabel: "Entfernen",
         danger: true,
       });
       if (!confirmed) return;
       await clearApiKey(provider);
       await hydrateProviderConfig(panel);
-      showToast("API-Schlüssel entfernt.", { iconName: "trash" });
+      await hydrateSpeechProviderConfig(panel);
+      showToast(provider === "gemini" ? "Gemini-API-Schlüssel entfernt." : "API-Schlüssel entfernt.", { iconName: "trash" });
     });
 
-    panel.querySelector(`[data-key-test="${provider}"]`)?.addEventListener("click", async (event) => {
+    panel.querySelector(`[data-key-test="${provider}"]${scopeSel}`)?.addEventListener("click", async (event) => {
       const button = event.currentTarget;
       const original = button.innerHTML;
       button.disabled = true;
       button.innerHTML = `${icon("refresh")} Prüfe …`;
-      const status = panel.querySelector(`[data-key-status="${provider}"]`);
+      const status = panel.querySelector(`[data-key-status="${provider}"]${scopeSel}`);
       const model =
         panel.querySelector('[data-model-input="gemini"]')?.value.trim() ||
         learner.getSettings().handwritingModel;
@@ -2031,7 +2115,102 @@ export function renderParent(main) {
       const value = event.target.value.trim() || "gemini-3.5-flash-lite";
       event.target.value = value;
       await learner.updateSettings({ handwritingModel: value });
-      showToast("Modell gespeichert.", { iconName: "check" });
+      showToast("Modell für Handschrift/Foto gespeichert.", { iconName: "check" });
+    });
+  }
+
+  function bindSpeechProviderConfig(panel) {
+    panel.querySelector("#set-speech-provider")?.addEventListener("change", async (event) => {
+      const value = event.target.value === "gemini" ? "gemini" : "browser";
+      await learner.updateSettings({ speechProvider: value });
+      renderPanel();
+      showToast(
+        value === "gemini"
+          ? "Spracheingabe: Gemini (Audio → KI)."
+          : "Spracheingabe: Browser-Spracherkennung.",
+        { iconName: "mic" }
+      );
+    });
+
+    if ((learner.getSettings().speechProvider || "browser") !== "gemini") return;
+
+    panel.querySelector('[data-key-toggle="gemini"][data-key-scope="speech"]')?.addEventListener("click", (event) => {
+      const input = panel.querySelector('[data-key-input="gemini"][data-key-scope="speech"]');
+      if (!input) return;
+      const show = input.type === "password";
+      input.type = show ? "text" : "password";
+      event.currentTarget.setAttribute("aria-pressed", String(show));
+      event.currentTarget.innerHTML = `${icon("eye")} ${show ? "Verbergen" : "Zeigen"}`;
+    });
+
+    panel.querySelector('[data-key-save="gemini"][data-key-scope="speech"]')?.addEventListener("click", async () => {
+      const input = panel.querySelector('[data-key-input="gemini"][data-key-scope="speech"]');
+      const value = input?.value.trim() || "";
+      if (!value) {
+        input?.focus();
+        showToast("Bitte zuerst einen API-Schlüssel einfügen.", { type: "warn", iconName: "info" });
+        return;
+      }
+      await setApiKey("gemini", value);
+      input.value = "";
+      await hydrateProviderConfig(panel);
+      await hydrateSpeechProviderConfig(panel);
+      showToast("Gemini-Schlüssel gespeichert. Er bleibt auf diesem Gerät und ist nicht im Backup.", {
+        type: "success",
+        iconName: "check",
+      });
+    });
+
+    panel.querySelector('[data-key-clear="gemini"][data-key-scope="speech"]')?.addEventListener("click", async () => {
+      const confirmed = await confirmDialog({
+        title: "Gemini-Schlüssel entfernen?",
+        message: "Spracheingabe mit Gemini, Handschrift mit Gemini und Foto-Import mit Gemini funktionieren danach nicht mehr, bis ein neuer Schlüssel gespeichert wird.",
+        confirmLabel: "Entfernen",
+        danger: true,
+      });
+      if (!confirmed) return;
+      await clearApiKey("gemini");
+      await hydrateProviderConfig(panel);
+      await hydrateSpeechProviderConfig(panel);
+      showToast("Gemini-API-Schlüssel entfernt.", { iconName: "trash" });
+    });
+
+    panel.querySelector('[data-key-test="gemini"][data-key-scope="speech"]')?.addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      const original = button.innerHTML;
+      button.disabled = true;
+      button.innerHTML = `${icon("refresh")} Prüfe …`;
+      const status = panel.querySelector('[data-key-status="gemini"][data-key-scope="speech"]');
+      const model =
+        panel.querySelector('[data-model-input="gemini-speech"]')?.value.trim() ||
+        learner.getSettings().speechModel;
+      try {
+        const message = await testCloudProvider("gemini", { model });
+        showToast(message, { type: "success", iconName: "check" });
+        if (status) {
+          status.textContent = `${message} (Schlüssel gültig für Gemini.)`;
+          status.classList.add("is-ok");
+        }
+      } catch (error) {
+        const message = error?.message || "Der Verbindungstest ist fehlgeschlagen.";
+        showToast(message, { type: "warn", iconName: "info" });
+        if (status) {
+          status.textContent = message;
+          status.classList.remove("is-ok");
+        }
+      } finally {
+        if (button.isConnected) {
+          button.disabled = false;
+          button.innerHTML = original;
+        }
+      }
+    });
+
+    panel.querySelector('[data-model-input="gemini-speech"]')?.addEventListener("change", async (event) => {
+      const value = event.target.value.trim() || "gemini-3.5-flash-lite";
+      event.target.value = value;
+      await learner.updateSettings({ speechModel: value });
+      showToast("Modell für Spracheingabe gespeichert.", { iconName: "check" });
     });
   }
 
@@ -2231,6 +2410,17 @@ export function renderParent(main) {
       providerId === "off" || settings.handwriting === false
         ? "Handschrift ist aus – es werden keine Schreibbilder gesendet."
         : `Schreibbilder gehen an ${esc(providerLabel)}.`;
+    const speechProviderId = settings.speechProvider || "browser";
+    const speechProviderOptions = [
+      { id: "browser", label: "Browser-Spracherkennung (Standard)" },
+      { id: "gemini", label: "Google Gemini (Audio → KI, online)" },
+    ]
+      .map((item) => `<option value="${item.id}" ${item.id === speechProviderId ? "selected" : ""}>${esc(item.label)}</option>`)
+      .join("");
+    const speechSentence =
+      speechProviderId === "gemini"
+        ? "Sprachaufnahmen werden lokal aufgenommen und zur Erkennung an Google Gemini gesendet."
+        : "Sprachaufnahmen gehen an den Spracherkennungsdienst des Browsers.";
     const profileRows = profiles.isReady()
       ? profiles.listProfiles()
       : [];
@@ -2301,6 +2491,23 @@ export function renderParent(main) {
             </div>
           </div>
           ${providerConfigMarkup(settings)}
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><div><h2>Spracheingabe</h2><p>Wie wird gesprochene Antwort erkannt?</p></div></div>
+          <div class="settings-list">
+            <div class="setting-row">
+              <div class="setting-text">
+                <strong>Anbieter</strong>
+                <small>Standard ist die Browser-Spracherkennung. Gemini ist eine Alternative, wenn sie im Browser nicht gut funktioniert oder fehlt.</small>
+              </div>
+              <label class="sr-only" for="set-speech-provider">Anbieter für Spracheingabe</label>
+              <select class="select" id="set-speech-provider" style="max-width:260px">
+                ${speechProviderOptions}
+              </select>
+            </div>
+          </div>
+          ${speechProviderConfigMarkup(settings)}
         </div>
 
         <div class="panel">
@@ -2388,7 +2595,7 @@ export function renderParent(main) {
               <p class="mb-1"><strong>${consent?.allowOnline ? "Online-Funktionen sind erlaubt." : "Online-Funktionen sind aus."}</strong></p>
               <p class="mb-0">${
                 consent?.allowOnline
-                  ? `Sprachaufnahmen gehen an den Spracherkennungsdienst des Browsers. ${handwritingSentence} Fotos für den Vokabel-Import werden nur zum Lesen gesendet. SpeakUp speichert nichts davon.`
+                  ? `${speechSentence} ${handwritingSentence} Fotos für den Vokabel-Import werden nur zum Lesen gesendet. SpeakUp speichert nichts davon.`
                   : "Dein Kind lernt mit Tippen und Vorlesen. Es werden keine Sprachaufnahmen, Schreibbilder oder Fotos gesendet."
               }</p>
             </div>
@@ -2523,6 +2730,8 @@ export function renderParent(main) {
 
     bindProviderConfig(panel);
     void hydrateProviderConfig(panel);
+    bindSpeechProviderConfig(panel);
+    void hydrateSpeechProviderConfig(panel);
     bindProfileSettings(panel);
     bindDriveSettings(panel);
     void hydrateDriveStatus(panel);

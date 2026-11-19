@@ -49,6 +49,9 @@ const DEFAULT_SETTINGS = {
   effects: true,
   autoSpeak: true,
   speechRate: 0.9,
+  // Spracheingabe: "browser" (Web Speech API) oder "gemini" (Audio-Aufnahme → KI)
+  speechProvider: "browser",
+  speechModel: "gemini-3.5-flash-lite",
   mode: "mix",
   lastThemeId: "tiere",
   handwriting: true,
