@@ -50,6 +50,65 @@ const MODE_INFO = {
 
 const MIX_CYCLE = ["speak", "listen", "write"];
 
+/** Sichtbare Lücke für das gesuchte Wort – enthält nie die Lösung. */
+const WORD_GAP = `<span class="word-gap" aria-label="Lücke">_____</span>`;
+
+/**
+ * Baut aus dem gespeicherten Beispielsatz eine Lückenvariante.
+ * Die gesuchte Antwort und alle akzeptierten Alternativen werden maskiert,
+ * damit der Satz zwar Kontext gibt, die Lösung aber nicht ablesbar ist.
+ * Einfache Flexionen (dog → dogs, paint → painting) werden mit abgedeckt.
+ */
+function maskExampleWord(word) {
+  const example = String(word?.example || "").trim();
+  if (!example) return "";
+
+  const terms = [word.en, ...(word.alternatives || [])]
+    .flatMap((value) => {
+      const term = String(value ?? "").replace(/\s+/g, " ").trim();
+      if (!term) return [];
+      // „to swim“ soll auch ein einfaches „swim“ im Satz verdecken.
+      const bare = term.replace(/^to\s+/i, "").trim();
+      return bare && bare !== term ? [term, bare] : [term];
+    })
+    .map((term) => term.toLocaleLowerCase("en"))
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+
+  if (!terms.length) return esc(example);
+
+  const escaped = [...new Set(terms)]
+    .map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+"))
+    .map((term) => `${term}(?:s|es|ed|ing)?`)
+    .join("|");
+
+  // Der Rand darf kein Buchstabe/Zahl sein – „car“ trifft also nicht „carpet“.
+  const pattern = new RegExp(`(^|[^\\p{L}\\p{N}])(${escaped})(?=$|[^\\p{L}\\p{N}])`, "giu");
+
+  let html = "";
+  let cursor = 0;
+  for (const match of example.matchAll(pattern)) {
+    html += esc(example.slice(cursor, match.index));
+    html += esc(match[1] || ""); // Trennzeichen vor der Lücke bleibt erhalten.
+    html += WORD_GAP;
+    cursor = match.index + match[0].length;
+  }
+  html += esc(example.slice(cursor));
+  return html;
+}
+
+/** Beispielsatz mit Lücke für die Fragekarte. */
+function renderExample(word) {
+  const masked = maskExampleWord(word);
+  if (!masked) return "";
+  return `
+    <p class="example-sentence">
+      ${icon("speaker")}
+      <span class="example-label">Beispiel:</span>
+      <em>${masked}</em>
+    </p>`;
+}
+
 /** Wird von der Startseite aufgerufen, bevor die Route gewechselt wird. */
 let pendingConfig = null;
 
@@ -268,6 +327,7 @@ function runRound(main, config, onRestart) {
     const info = MODE_INFO[mode] || MODE_INFO.write;
     const emoji = word.emoji || "💬";
     const badge = `<span class="mode-badge">${icon(info.iconName)} ${esc(info.label)}</span>`;
+    const example = renderExample(word);
 
     if (mode === "speak") {
       return `
@@ -280,6 +340,7 @@ function runRound(main, config, onRestart) {
               <p class="prompt-sub">Sag das englische Wort laut.</p>
             </div>
           </div>
+          ${example}
           <p class="instruction">Tippe auf das Mikrofon und sprich <strong>deutlich</strong>.
             Du kannst auch lieber tippen.</p>
 
@@ -312,6 +373,7 @@ function runRound(main, config, onRestart) {
               <p class="prompt-sub">Schreib das englische Wort auf.</p>
             </div>
           </div>
+          ${example}
           <div class="listen-help">
             <button type="button" class="listen-btn" data-action="speak-word">
               ${icon("speaker")} Wort vorsprechen
@@ -335,6 +397,7 @@ function runRound(main, config, onRestart) {
             <p class="prompt-sub">Wie heißt das auf Englisch?</p>
           </div>
         </div>
+        ${example}
         ${renderWritingArea(mode)}
       </div>`;
   }
