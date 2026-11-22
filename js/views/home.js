@@ -57,7 +57,7 @@ export function renderHome(main) {
       </button>`
   ).join("");
 
-  const themeCards = themes.map((theme, index) => {
+  const renderThemeCard = (theme, index) => {
     const stats = library.getThemeStats(theme.id, progress);
     const isLocked = !library.isThemeUnlocked(theme, profile.points);
     const percent = stats.total ? Math.round((stats.mastered / stats.total) * 100) : 0;
@@ -79,9 +79,41 @@ export function renderHome(main) {
           ${isLocked ? `${icon("lock")} Noch ${Math.max(0, theme.unlockPoints - profile.points)} Punkte` : `Los geht's ${icon("forward")}`}
         </span>
       </button>`;
-  }).join("");
+  };
 
   const allUnlockedWords = unlocked.reduce((sum, theme) => sum + library.getWords(theme.id).length, 0);
+  const themeGroups = [];
+  const bookGroups = new Map();
+  themes.forEach((theme, index) => {
+    const bookId = theme.source?.type === "westermann-book" ? (theme.source.bookId || theme.source.bookName || theme.id) : "";
+    if (bookId) {
+      let g = bookGroups.get(bookId);
+      if (!g) {
+        g = { kind: "book", name: theme.source.bookName || "Westermann-Buch", items: [] };
+        bookGroups.set(bookId, g);
+        themeGroups.push(g);
+      }
+      g.items.push({ theme, index });
+    } else {
+      themeGroups.push({ kind: "theme", theme, index });
+    }
+  });
+
+  const themeSections = themeGroups.map((group) => {
+    if (group.kind === "theme") {
+      return `<div class="theme-grid">${renderThemeCard(group.theme, group.index)}</div>`;
+    }
+    return `
+      <section class="home-book-group" aria-label="${esc(group.name)}">
+        <div class="home-book-head">
+          <h3>${icon("book")} ${esc(group.name)}</h3>
+          <span class="tiny muted">${group.items.length} Kapitel</span>
+        </div>
+        <div class="theme-grid">
+          ${group.items.map(({ theme, index }) => renderThemeCard(theme, index)).join("")}
+        </div>
+      </section>`;
+  }).join("");
 
   main.innerHTML = `
     <div class="home">
@@ -130,19 +162,21 @@ export function renderHome(main) {
           <h2 id="themes-title">Deine Themen</h2>
           <p>${masteredTotal} von ${allWords.length} Wörtern gemeistert${nextLocked ? ` · Nächste Welt bei ${nextLocked.unlockPoints} Punkten` : ""}</p>
         </div>
-        <div class="theme-grid">
-          ${themeCards}
-          <button type="button" class="theme-card" data-theme="all" style="--theme-tint:#FFF3CF"
-                  aria-label="Alle Themen: ${allUnlockedWords} Wörter, Mix-Runde">
-            <span class="theme-card-emoji" aria-hidden="true">🌈</span>
-            <span class="theme-name">Alle Themen</span>
-            <span class="theme-card-meta">${allUnlockedWords} Wörter aus ${unlocked.length} ${unlocked.length === 1 ? "Welt" : "Welten"}</span>
-            <span class="theme-progress">
-              <span class="theme-progress-top"><span>Überraschungsrunde</span><span>Mix</span></span>
-              <span class="progress-track"><span class="progress-fill" style="width:100%"></span></span>
-            </span>
-            <span class="go">${icon("forward")} Quer durch alle Themen</span>
-          </button>
+        <div class="home-theme-groups">
+          ${themeSections}
+          <div class="theme-grid">
+            <button type="button" class="theme-card" data-theme="all" style="--theme-tint:#FFF3CF"
+                    aria-label="Alle Themen: ${allUnlockedWords} Wörter, Mix-Runde">
+              <span class="theme-card-emoji" aria-hidden="true">🌈</span>
+              <span class="theme-name">Alle Themen</span>
+              <span class="theme-card-meta">${allUnlockedWords} Wörter aus ${unlocked.length} ${unlocked.length === 1 ? "Welt" : "Welten"}</span>
+              <span class="theme-progress">
+                <span class="theme-progress-top"><span>Überraschungsrunde</span><span>Mix</span></span>
+                <span class="progress-track"><span class="progress-fill" style="width:100%"></span></span>
+              </span>
+              <span class="go">${icon("forward")} Quer durch alle Themen</span>
+            </button>
+          </div>
         </div>
       </section>
 
