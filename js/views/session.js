@@ -1184,7 +1184,6 @@ function runRound(main, config, onRestart) {
         <div>
           <span class="small muted">${esc(word.de)}</span><br>
           <strong>${esc(word.en)}</strong>
-          <button type="button" class="btn-link example-inline-audio" data-action="speak-word" aria-label="Wort anhören">${icon("speaker")}</button>
           ${alternativesLine}
           ${word.example ? `<p class="mb-0 mt-2 example-feedback"><button type="button" class="btn-link" data-action="speak-example">${icon("speaker")}</button> <em>${renderMarkedExample(normalizeExampleText(word.example))}</em></p>` : ""}
         </div>
@@ -1204,7 +1203,9 @@ function runRound(main, config, onRestart) {
       </div>`;
 
     stage.append(card);
-    card.querySelector('[data-action="speak-word"]')?.addEventListener("click", () => playWordAudio(word));
+    card.querySelectorAll('[data-action="speak-word"]').forEach((btn) => {
+      btn.addEventListener("click", () => playWordAudio(word));
+    });
     card.querySelectorAll('[data-action="speak-example"]').forEach((btn) => {
       btn.addEventListener("click", () => speakWord(exampleSpeechText(word.example)));
     });
