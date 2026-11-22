@@ -44,14 +44,23 @@ export function renderHome(main) {
     .filter((theme) => !library.isThemeUnlocked(theme, profile.points))
     .sort((a, b) => a.unlockPoints - b.unlockPoints)[0];
   const masteredTotal = [...progress.values()].filter((record) => learner.isMastered(record)).length;
-  const practicedTotal = [...progress.values()].filter((record) => (record.seen || 0) > 0).length;
-  const dueNow = allWords.filter((word) => {
-    const record = progress.get(word.id);
-    return record && (!record.dueAt || record.dueAt <= Date.now()) && !learner.isMastered(record);
-  }).length;
-  const totalAnswers = [...progress.values()].reduce((sum, r) => sum + (r.seen || 0), 0);
-  const totalCorrect = [...progress.values()].reduce((sum, r) => sum + (r.correct || 0), 0);
-  const accuracy = totalAnswers ? Math.round((totalCorrect / totalAnswers) * 100) : null;
+  let practicedTotal = 0;
+  let dueNow = 0;
+  let accuracyPct = null;
+  try {
+    const now = Date.now();
+    const records = [...progress.values()];
+    practicedTotal = records.filter((record) => (record.seen || 0) > 0).length;
+    dueNow = allWords.filter((word) => {
+      const record = progress.get(word.id);
+      return record && (!record.dueAt || record.dueAt <= now) && !learner.isMastered(record);
+    }).length;
+    const answerSum = records.reduce((sum, r) => sum + (r.seen || 0), 0);
+    const correctSum = records.reduce((sum, r) => sum + (r.correct || 0), 0);
+    accuracyPct = answerSum ? Math.round((correctSum / answerSum) * 100) : null;
+  } catch (e) {
+    console.warn("[home] Mini-Statistik konnte nicht berechnet werden", e);
+  }
 
   const modeCards = MODES.map(
     (item) => `
@@ -152,7 +161,7 @@ export function renderHome(main) {
         <div class="mini-stat"><strong>${practicedTotal}</strong><span>geübt</span></div>
         <div class="mini-stat"><strong>${masteredTotal}</strong><span>gemeistert</span></div>
         <div class="mini-stat"><strong>${dueNow}</strong><span>fällig</span></div>
-        <div class="mini-stat"><strong>${accuracy === null ? "–" : `${accuracy}%`}</strong><span>Trefferquote</span></div>
+        <div class="mini-stat"><strong>${accuracyPct === null ? "–" : `${accuracyPct}%`}</strong><span>Trefferquote</span></div>
       </section>
 
       ${!learner.canUseOnlineFeatures() ? `
