@@ -42,8 +42,7 @@ import { confetti } from "../ui/confetti.js";
 import { showConsentModal } from "./onboarding.js";
 
 const ROUND_SIZE = 10;
-const POINTS_FIRST_TRY = 10;
-const POINTS_RETRY = 4;
+// Punkte werden nur beim Meistern eines Wortes vergeben (learner.POINTS_PER_MASTERY).
 const MAX_QUEUE = 24;
 
 const MODE_INFO = {
@@ -963,22 +962,30 @@ function runRound(main, config, onRestart) {
     const promote = firstAttempt;
     let queuedEntry = null;
     let recordPromise = null;
+    const wasMastered = learner.isMastered(learner.getProgress(word.id));
+    let masteryGranted = false;
 
     if (correct) {
       state.correctAttempts += 1;
       state.streak += 1;
       state.maxStreak = Math.max(state.maxStreak, state.streak);
       state.modeCorrect[current.mode] = (state.modeCorrect[current.mode] || 0) + 1;
-      if (firstAttempt) {
-        state.firstTryCorrect += 1;
-        gained = POINTS_FIRST_TRY;
-      } else {
-        gained = POINTS_RETRY;
-      }
-      state.points += gained;
-      recordPromise = learner.recordAttempt(word.id, true, { promote, mode: current.mode }).catch((error) => {
-        console.error("[session] Fortschritt konnte nicht gespeichert werden", error);
-      });
+      if (firstAttempt) state.firstTryCorrect += 1;
+      recordPromise = learner
+        .recordAttempt(word.id, true, { promote, mode: current.mode })
+        .then((record) => {
+          if (!wasMastered && learner.isMastered(record)) {
+            masteryGranted = true;
+            gained = learner.POINTS_PER_MASTERY;
+            state.points += gained;
+            floatPoints(gained);
+            showToast(`Wort gemeistert! +${gained} Punkte`, { type: "success", iconName: "star" });
+          }
+          return record;
+        })
+        .catch((error) => {
+          console.error("[session] Fortschritt konnte nicht gespeichert werden", error);
+        });
       sfx.correct();
       if (state.streak === 3 || state.streak === 5) {
         showToast(randomLine(MASCOT_LINES.streak), { type: "success", iconName: "flame" });
@@ -1000,7 +1007,6 @@ function runRound(main, config, onRestart) {
     if (firstAttempt) state.firstPassDone.add(word.id);
     updateProgress();
 
-    if (gained > 0) floatPoints(gained);
     if (correct && (state.streak === 5 || state.streak === 10)) {
       confetti({ count: 60, originY: 0.35 });
     }
@@ -1028,7 +1034,8 @@ function runRound(main, config, onRestart) {
           word,
           mode: current.mode,
           firstAttempt,
-          gained: firstAttempt ? POINTS_FIRST_TRY : POINTS_RETRY,
+          gained: 0, // nur bei echter Meisterschaft
+          wasMastered,
           streakBefore,
           queuedEntry,
           previousProgress,
@@ -1128,7 +1135,9 @@ function runRound(main, config, onRestart) {
       // lokalen Datenbank eindeutig bleibt.
       await attempt.recordPromise;
       await learner.restoreProgress(attempt.word.id, attempt.previousProgress);
-      await learner.recordAttempt(attempt.word.id, true, { promote: attempt.firstAttempt, mode: attempt.mode });
+      const record = await learner.recordAttempt(attempt.word.id, true, { promote: attempt.firstAttempt, mode: attempt.mode });
+      attempt.masteredNow = !attempt.wasMastered && learner.isMastered(record);
+      attempt.gained = attempt.masteredNow ? learner.POINTS_PER_MASTERY : 0;
     } catch (error) {
       console.error("[session] Nachträgliche Wertung fehlgeschlagen", error);
       showToast("Das konnte gerade nicht gespeichert werden. Versuch es noch einmal.", {
@@ -1156,11 +1165,11 @@ function runRound(main, config, onRestart) {
     state.correctAttempts += 1;
     state.modeCorrect[attempt.mode] = (state.modeCorrect[attempt.mode] || 0) + 1;
     if (attempt.firstAttempt) state.firstTryCorrect += 1;
-    state.points += attempt.gained;
+    if (attempt.gained > 0) state.points += attempt.gained;
     updateProgress();
 
     sfx.correct();
-    floatPoints(attempt.gained);
+    if (attempt.gained > 0) floatPoints(attempt.gained);
     if (state.streak === 3 || state.streak === 5) {
       showToast(randomLine(MASCOT_LINES.streak), { type: "success", iconName: "flame" });
     }
@@ -1234,7 +1243,7 @@ function runRound(main, config, onRestart) {
         <span class="feedback-icon">${icon(correct ? "check" : "close")}</span>
         <div>
           <h2 class="feedback-title">${esc(title)}</h2>
-          <p class="mb-0">${correct ? `${icon("star", "icon-star")} +${gained} Punkte` : "Beim nächsten Mal klappt es!"}</p>
+          <p class="mb-0">${correct ? (gained > 0 ? `${icon("star", "icon-star")} +${gained} Punkte` : "Richtig! Punkte gibt es, wenn du das Wort meisterst.") : "Beim nächsten Mal klappt es!"}</p>
         </div>
       </div>
       <div class="feedback-solution">
@@ -1358,8 +1367,8 @@ function runRound(main, config, onRestart) {
         </div>
         <h1 class="result-title">${stars === 3 ? "Fantastisch!" : stars === 2 ? "Super gemacht!" : "Gut geübt!"}</h1>
         <p class="muted mb-2">${esc(state.themeName)} · ${plural(total, "Wort", "Wörter")} · ${esc(MODE_INFO[state.baseMode]?.label || "Mix")}</p>
-        <span class="result-points">${icon("star", "icon-star")} +${totalPoints} Punkte</span>
-        <span class="tiny bold mt-1">inklusive Glücksrad-Überraschung</span>
+        <span class="result-points" id="result-points">${icon("star", "icon-star")} +${totalPoints} Punkte</span>
+        <span class="tiny bold mt-1" id="result-points-note">${wheelReward.points > 0 ? "inklusive Glücksrad-Überraschung" : "Punkte für gemeisterte Wörter"}</span>
         <div class="result-stats">
           <div class="result-stat"><strong>${state.firstTryCorrect} / ${total}</strong><span>beim ersten Versuch</span></div>
           <div class="result-stat"><strong>${state.maxStreak}</strong><span>beste Serie</span></div>
@@ -1405,6 +1414,10 @@ function runRound(main, config, onRestart) {
       .finishSession(summary)
       .then((result) => {
         if (!state.alive) return;
+        // Punkte können noch asynchron durch Meisterschaft nachträglich kommen.
+        const pointsNode = stage.querySelector("#result-points");
+        const finalPoints = state.points + wheelReward.points;
+        if (pointsNode) pointsNode.innerHTML = `${icon("star", "icon-star")} +${finalPoints} Punkte`;
         const extra = stage.querySelector("#result-extra");
         if (!extra) return;
         const parts = [];
