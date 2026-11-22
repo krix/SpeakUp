@@ -33,6 +33,8 @@ import {
   readTextFile,
   setButtonBusy,
   errorMessage,
+  sanitizeRichText,
+  stripRichText,
 } from "../ui/dom.js";
 import { sfx, setSfxEnabled } from "../ui/sfx.js";
 import { speak, unlockTts } from "../core/tts.js";
@@ -374,12 +376,12 @@ export function renderParent(main) {
                         <tr data-search="${esc(`${word.de} ${word.en} ${(word.alternatives || []).join(" ")}`.toLowerCase())}" ${matches ? "" : "hidden"}>
                           <td class="tiny muted">${index + 1}</td>
                           <td>
-                            <strong>${esc(word.de)}</strong>
+                            <strong>${sanitizeRichText(word.de)}</strong>
                             ${word.emoji ? `<span aria-hidden="true"> ${esc(word.emoji)}</span>` : ""}
                           </td>
-                          <td>${esc(word.en)}</td>
+                          <td>${sanitizeRichText(word.en)}</td>
                           <td class="tiny">
-                            ${word.alternatives?.length ? `<div>${word.alternatives.map((alt) => esc(alt)).join(", ")}</div>` : `<span class="muted">–</span>`}
+                            ${word.alternatives?.length ? `<div>${word.alternatives.map((alt) => sanitizeRichText(alt)).join(", ")}</div>` : `<span class="muted">–</span>`}
                             ${word.example ? `<div class="muted">„${esc(word.example)}“</div>` : ""}
                           </td>
                           <td><span class="preview-stat" title="Leitner-Box">${record?.seen ? record.box : "neu"}</span></td>
@@ -1938,8 +1940,8 @@ export function renderParent(main) {
                         .map((row) => {
                           const accuracy = row.seen ? `${Math.round(row.accuracy * 100)} %` : "–";
                           return `
-                          <tr data-search="${esc(`${row.word.de} ${row.word.en} ${row.theme?.name || ""}`.toLowerCase())}">
-                            <td><strong>${esc(row.word.de)}</strong><div class="tiny muted">${esc(row.word.en)}</div></td>
+                          <tr data-search="${esc(`${stripRichText(row.word.de)} ${stripRichText(row.word.en)} ${row.theme?.name || ""}`.toLowerCase())}">
+                            <td><strong>${sanitizeRichText(row.word.de)}</strong><div class="tiny muted">${sanitizeRichText(row.word.en)}</div></td>
                             <td class="tiny">${esc(row.theme?.emoji || "")} ${esc(row.theme?.name || "–")}</td>
                             <td><span class="preview-stat">${row.seen ? row.box : "neu"}</span></td>
                             <td class="tiny">${row.speakCorrect}/${row.speakSeen}</td>
@@ -1947,7 +1949,7 @@ export function renderParent(main) {
                             <td class="bold">${accuracy}</td>
                             <td class="tiny muted">${row.lastSeen ? esc(formatDate(row.lastSeen)) : "–"}</td>
                             <td class="actions">
-                              <button type="button" class="icon-btn tiny-btn" data-stat-speak="${esc(row.word.en)}" aria-label="Wort vorlesen">${icon("speaker")}</button>
+                              <button type="button" class="icon-btn tiny-btn" data-stat-speak="${esc(stripRichText(row.word.en))}" aria-label="Wort vorlesen">${icon("speaker")}</button>
                               <button type="button" class="icon-btn tiny-btn" data-stat-reset="${esc(row.word.id)}" aria-label="Fortschritt dieses Wortes löschen" ${row.seen ? "" : "disabled"}>${icon("refresh")}</button>
                             </td>
                           </tr>`;

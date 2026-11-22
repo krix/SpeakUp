@@ -4,7 +4,7 @@
  */
 import * as library from "../core/library.js";
 import * as learner from "../core/learner.js";
-import { icon, esc, formatDate, plural, showToast } from "../ui/dom.js";
+import { icon, esc, formatDate, plural, showToast, sanitizeRichText, stripRichText } from "../ui/dom.js";
 import { mascot } from "../ui/mascot.js";
 import { themeMedal } from "../ui/medal.js";
 import { speak, unlockTts } from "../core/tts.js";
@@ -138,10 +138,10 @@ export function renderProgress(main) {
         .map(
           ({ word, record }) => `
           <div class="weak-row">
-            <span class="de">${esc(word.de)}</span>
-            <span class="en">→ ${esc(word.en)}</span>
+            <span class="de">${sanitizeRichText(word.de)}</span>
+            <span class="en">→ ${sanitizeRichText(word.en)}</span>
             <span class="meta">Box ${record.box} · ${record.correct}/${record.seen} richtig</span>
-            <button type="button" class="icon-btn" data-speak="${esc(word.en)}" aria-label="${esc(word.en)} vorlesen">
+            <button type="button" class="icon-btn" data-speak="${esc(stripRichText(word.en))}" aria-label="${esc(stripRichText(word.en))} vorlesen">
               ${icon("speaker")}
             </button>
           </div>`

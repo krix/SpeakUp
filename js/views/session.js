@@ -34,6 +34,8 @@ import {
   confirmDialog,
   starSvg,
   plural,
+  sanitizeRichText,
+  stripRichText,
 } from "../ui/dom.js";
 import { mascot, MASCOT_LINES, randomLine } from "../ui/mascot.js";
 import { sfx } from "../ui/sfx.js";
@@ -56,14 +58,14 @@ const MIX_CYCLE = ["speak", "listen", "write"];
 /** Sichtbare Lücke für das gesuchte Wort – enthält nie die Lösung. */
 const WORD_GAP = `<span class="word-gap" aria-label="Lücke">_____</span>`;
 
-/** Normalisiert Beispielsätze: Westermann-Markierungen _wort_ bleiben als Marker erhalten. */
+/** Normalisiert Beispielsätze: erlaubt einfache HTML-Tags, behält _wort_-Marker. */
 function normalizeExampleText(value) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
 }
 
-/** Text für Sprachausgabe: Marker/Anführungszeichen entfernen. */
+/** Text für Sprachausgabe: HTML/Marker/Anführungszeichen entfernen. */
 function exampleSpeechText(value) {
-  return normalizeExampleText(value)
+  return stripRichText(normalizeExampleText(value))
     .replace(/_([^_]+)_/g, "$1")
     .replace(/[„“”"']/g, "")
     .replace(/\s+/g, " ")
@@ -92,27 +94,13 @@ function buildAnswerPattern(word) {
 }
 
 function renderMarkedExample(example) {
-  let html = "";
-  let cursor = 0;
-  const pattern = /_([^_]+)_|(^|[^\p{L}\p{N}])(["“„'])([^\n"'“”„]+?)(["”"'])(?=$|[^\p{L}\p{N}])/giu;
-  for (const match of example.matchAll(pattern)) {
-    const full = match[0];
-    const idx = match.index ?? 0;
-    if (match[1] !== undefined) {
-      html += esc(example.slice(cursor, idx));
-      html += `<strong class="example-focus">${esc(match[1])}</strong>`;
-      cursor = idx + full.length;
-      continue;
-    }
-    const prefix = match[2] || "";
-    const word = match[4] || "";
-    html += esc(example.slice(cursor, idx));
-    html += esc(prefix);
-    html += `<strong class="example-focus">${esc(word)}</strong>`;
-    cursor = idx + full.length;
-  }
-  html += esc(example.slice(cursor));
-  return html;
+  // Erst Fokus-Marker einsetzen, dann sicher als Rich-Text rendern.
+  let text = String(example || "");
+  text = text.replace(/_([^_]+)_/g, (_, term) => `<strong class="example-focus">${term}</strong>`);
+  text = text.replace(/(^|[^\p{L}\p{N}])(["“„'])([^\n"'“”„<>]+?)(["”"'])(?=$|[^\p{L}\p{N}])/giu, (_, prefix, _q1, word, _q2) => {
+    return `${prefix}<strong class="example-focus">${word}</strong>`;
+  });
+  return sanitizeRichText(text);
 }
 
 /**
@@ -397,7 +385,7 @@ function runRound(main, config, onRestart) {
               ? `<figure class="prompt-media" aria-hidden="true"><img class="prompt-image" src="${esc(word.imageUrl)}" alt="" loading="lazy" decoding="async"></figure>`
               : `<span class="prompt-emoji" aria-hidden="true">${esc(emoji)}</span>`}
             <div>
-              <h1 class="prompt-de" id="question-title">${esc(word.de)}</h1>
+              <h1 class="prompt-de" id="question-title">${sanitizeRichText(word.de)}</h1>
               <p class="prompt-sub">Sag das englische Wort laut.</p>
             </div>
           </div>
@@ -463,7 +451,7 @@ function runRound(main, config, onRestart) {
             ? `<figure class="prompt-media" aria-hidden="true"><img class="prompt-image" src="${esc(word.imageUrl)}" alt="" loading="lazy" decoding="async"></figure>`
             : `<span class="prompt-emoji" aria-hidden="true">${esc(emoji)}</span>`}
           <div>
-            <h1 class="prompt-de" id="question-title">${esc(word.de)}</h1>
+            <h1 class="prompt-de" id="question-title">${sanitizeRichText(word.de)}</h1>
             <p class="prompt-sub">Wie heißt das auf Englisch?</p>
           </div>
         </div>
@@ -839,7 +827,7 @@ function runRound(main, config, onRestart) {
     stage.querySelector('[data-action="reveal"]')?.addEventListener("click", (event) => {
       const slot = stage.querySelector("#reveal-slot");
       if (!slot) return;
-      slot.innerHTML = `<p class="mb-0 small"><strong>${esc(word.de)}</strong>${word.emoji ? ` ${esc(word.emoji)}` : ""}</p>`;
+      slot.innerHTML = `<p class="mb-0 small"><strong>${sanitizeRichText(word.de)}</strong>${word.emoji ? ` ${esc(word.emoji)}` : ""}</p>`;
       event.currentTarget.remove();
     });
 
@@ -1205,7 +1193,7 @@ function runRound(main, config, onRestart) {
     const title = correct ? randomLine(MASCOT_LINES.correct) : randomLine(MASCOT_LINES.wrong);
     const alternatives = (word.alternatives || []).filter(Boolean);
     const alternativesLine = alternatives.length
-      ? `<p class="small muted mb-0 mt-1">Auch richtig: ${alternatives.map((alt) => `„${esc(alt)}“`).join(", ")}</p>`
+      ? `<p class="small muted mb-0 mt-1">Auch richtig: ${alternatives.map((alt) => `„${sanitizeRichText(alt)}“`).join(", ")}</p>`
       : "";
 
     // Nachträgliche Wertung: in Sprechübungen immer anbieten, sonst bei plausiblen Erkennungsfehlern.
@@ -1249,8 +1237,8 @@ function runRound(main, config, onRestart) {
       <div class="feedback-solution">
         ${word.imageUrl ? `<img class="feedback-image" src="${esc(word.imageUrl)}" alt="" loading="lazy" decoding="async">` : ""}
         <div>
-          <span class="small muted">${esc(word.de)}</span><br>
-          <strong>${esc(word.en)}</strong>
+          <span class="small muted">${sanitizeRichText(word.de)}</span><br>
+          <strong>${sanitizeRichText(word.en)}</strong>
           ${alternativesLine}
           ${word.example ? `<p class="mb-0 mt-2 example-feedback"><button type="button" class="btn-link" data-action="speak-example">${icon("speaker")}</button> <em>${renderMarkedExample(normalizeExampleText(word.example))}</em></p>` : ""}
         </div>
@@ -1380,8 +1368,8 @@ function runRound(main, config, onRestart) {
             <div class="result-word-list">
               ${missedWords.map((word) => `
                 <span class="result-word is-missed">
-                  ${esc(word.de)} = ${esc(word.en)}
-                  <button type="button" class="icon-btn" style="width:48px;height:48px" data-speak="${esc(word.en)}" aria-label="${esc(word.en)} vorlesen">
+                  ${sanitizeRichText(word.de)} = ${sanitizeRichText(word.en)}
+                  <button type="button" class="icon-btn" style="width:48px;height:48px" data-speak="${esc(stripRichText(word.en))}" aria-label="${esc(stripRichText(word.en))} vorlesen">
                     ${icon("speaker")}
                   </button>
                 </span>`).join("")}

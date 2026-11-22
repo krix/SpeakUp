@@ -15,6 +15,55 @@ export function esc(value) {
     .replace(/'/g, "&#39;");
 }
 
+const ALLOWED_RICH_TAGS = new Set(["i", "em", "b", "strong", "u", "br", "sub", "sup", "mark"]);
+
+/**
+ * Erlaubt einfache Formatierungs-Tags aus Vokabeldaten (z. B. <i>...</i>)
+ * und escaped alles andere sicher.
+ */
+export function sanitizeRichText(value) {
+  const text = String(value ?? "");
+  let out = "";
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    if (ch === "<") {
+      const close = text.indexOf(">", i + 1);
+      if (close !== -1) {
+        const raw = text.slice(i + 1, close).trim();
+        const m = raw.match(/^\/?\s*([a-z0-9]+)\s*\/?$/i);
+        if (m) {
+          const tag = m[1].toLowerCase();
+          if (ALLOWED_RICH_TAGS.has(tag)) {
+            const isClosing = /^\s*\//.test(raw);
+            const isVoid = tag === "br";
+            out += isClosing ? `</${tag}>` : (isVoid ? "<br>" : `<${tag}>`);
+            i = close + 1;
+            continue;
+          }
+        }
+      }
+    }
+    out += esc(ch);
+    i += 1;
+  }
+  return out;
+}
+
+export function stripRichText(value) {
+  return String(value ?? "")
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<\/?([a-z0-9]+)[^>]*>/gi, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function icon(name, className = "") {
   return `<svg class="icon ${className}" aria-hidden="true" focusable="false"><use href="#i-${name}"/></svg>`;
 }

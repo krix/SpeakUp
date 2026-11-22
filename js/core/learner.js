@@ -237,11 +237,13 @@ export function getProgressMap() {
 
 export function isMastered(record) {
   if (!record) return false;
-  const speakOk = (record.speakCorrect || 0) >= 3;
-  const writeOk = (record.writeCorrect || 0) >= 3;
+  const totalCorrect = (record.correct || 0);
+  const speakCorrect = record.speakCorrect || 0;
+  const writeCorrect = record.writeCorrect || 0;
+  const meetsRule = totalCorrect >= 5 && speakCorrect >= 2 && writeCorrect >= 2;
   // Rückwärtskompatibel: alte Box-5-Daten ohne Modusstatistik zählen weiter.
   const legacy = !record.speakSeen && !record.writeSeen && record.box >= 5 && record.seen > 0;
-  return (speakOk && writeOk) || legacy;
+  return meetsRule || legacy;
 }
 
 export function getProgress(wordId) {
@@ -368,10 +370,21 @@ export async function recordAttempt(wordId, correct, { promote = true, mode = nu
     record.streak += 1;
     record.lastCorrectAt = now;
     if (promote) {
-      record.box = clamp(record.box + 1, 1, 5);
+      // 5-Stufen-Leitner, aber nur nach Regel: 5x richtig gesamt,
+      // davon mindestens 2x sprechen und 2x schreiben.
+      const totalCorrect = record.correct || 0;
+      const speakCorrect = record.speakCorrect || 0;
+      const writeCorrect = record.writeCorrect || 0;
+      let allowedBox = 1;
+      if (totalCorrect >= 1) allowedBox = 2;
+      if (totalCorrect >= 2) allowedBox = 3;
+      if (totalCorrect >= 3 && (speakCorrect >= 1 || writeCorrect >= 1)) allowedBox = 4;
+      if (totalCorrect >= 5 && speakCorrect >= 2 && writeCorrect >= 2) allowedBox = 5;
+      record.box = clamp(Math.max(record.box, Math.min(record.box + 1, allowedBox)), 1, 5);
     }
     if (isMastered(record)) {
       record.masteredAt = record.masteredAt || now;
+      record.box = 5;
     }
     const days = LEITNER_INTERVALS[record.box] ?? 1;
     record.dueAt = now + days * DAY;

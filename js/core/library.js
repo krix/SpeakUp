@@ -431,10 +431,12 @@ export function getThemeStats(themeId, progressMap) {
   for (const word of words) {
     const progress = progressMap?.get?.(word.id);
     if (progress?.seen) started++;
-    const speakOk = (progress?.speakCorrect || 0) >= 3;
-    const writeOk = (progress?.writeCorrect || 0) >= 3;
+    const speakCorrect = progress?.speakCorrect || 0;
+    const writeCorrect = progress?.writeCorrect || 0;
+    const totalCorrect = progress?.correct || 0;
+    const meetsRule = totalCorrect >= 5 && speakCorrect >= 2 && writeCorrect >= 2;
     const legacyMastered = !progress?.speakSeen && !progress?.writeSeen && (progress?.box || 1) >= 5 && progress?.seen;
-    if (speakOk && writeOk || legacyMastered) mastered++;
+    if (meetsRule || legacyMastered) mastered++;
     speakSeen += progress?.speakSeen || 0;
     speakCorrect += progress?.speakCorrect || 0;
     writeSeen += progress?.writeSeen || 0;

@@ -7,6 +7,7 @@ import { normalizeKey } from "./hash.js";
 
 export function normalizeAnswer(value) {
   return String(value ?? "")
+    .replace(/<[^>]*>/g, " ") // HTML-Tags aus Vokabeldaten ignorieren
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "") // Akzente entfernen (café → cafe)
     .replace(/ß/g, "ss")
