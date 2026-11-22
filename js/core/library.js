@@ -47,6 +47,22 @@ function cleanUrl(value, maxLength = 600) {
   return "";
 }
 
+function cleanSource(source) {
+  if (!source || typeof source !== "object") return null;
+  const type = cleanText(source.type, 40);
+  const src = {
+    ...(type ? { type } : {}),
+    bookId: cleanText(source.bookId, 120),
+    bookName: cleanText(source.bookName, 160),
+    chapter: cleanText(source.chapter, 120),
+    chapterName: cleanText(source.chapterName, 160),
+    section: cleanText(source.section, 160),
+    page: cleanText(source.page, 40),
+  };
+  const hasSource = src.bookId || src.bookName || src.chapter || src.chapterName || src.section || src.page || src.type;
+  return hasSource ? src : null;
+}
+
 function makeWord(
   { de, en, alternatives, example, emoji, imageUrl = "", audioUrl = "", source = null },
   themeId,
