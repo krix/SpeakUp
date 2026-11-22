@@ -79,6 +79,9 @@ export async function applyVocabularyImport(analysis, { mode = "merge", themeId 
       alternatives: entry.alternatives,
       example: entry.example,
       emoji: entry.emoji,
+      imageUrl: entry.imageUrl || "",
+      audioUrl: entry.audioUrl || "",
+      source: entry.source || null,
     }));
 
   if (!rows.length) throw new Error("Es gibt keine fehlerfreien Zeilen zum Importieren.");

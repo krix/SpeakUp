@@ -17,6 +17,7 @@ import * as learner from "../core/learner.js";
 import * as transfer from "../core/transfer.js";
 import * as profiles from "../core/profiles.js";
 import * as drive from "../core/drive.js";
+import * as westermann from "../core/westermann.js";
 import db from "../core/db.js";
 import bus from "../core/bus.js";
 import { APP_VERSION, PARENT_SESSION_KEY } from "../core/config.js";
@@ -89,6 +90,10 @@ function freshPhotoState() {
   };
 }
 
+function freshWestermannState() {
+  return { busy: false, error: "", catalog: [], query: "", bookId: "", book: null, selectedChapters: [] };
+}
+
 function freshImportState(target) {
   return {
     source: "file",
@@ -98,10 +103,11 @@ function freshImportState(target) {
     target: target || "",
     mode: "merge",
     newName: "",
-    newEmoji: "📘",
+    newEmoji: "??",
     busy: false,
     error: "",
     photo: freshPhotoState(),
+    westermann: freshWestermannState(),
   };
 }
 
@@ -324,9 +330,14 @@ export function renderParent(main) {
             <h2>Wörter</h2>
             <p>${theme ? `${esc(theme.name)} · ${plural(words.length, "Wort", "Wörter")}` : "Kein Thema vorhanden"}</p>
           </div>
-          <button type="button" class="btn btn-small" data-action="add-word" ${theme ? "" : "disabled"}>
-            ${icon("plus")} Neues Wort
-          </button>
+          <div class="btn-row">
+            <button type="button" class="btn btn-ghost btn-small" data-action="make-list" ${words.length ? "" : "disabled"}>
+              ${icon("plus")} Eigene Liste
+            </button>
+            <button type="button" class="btn btn-small" data-action="add-word" ${theme ? "" : "disabled"}>
+              ${icon("plus")} Neues Wort
+            </button>
+          </div>
         </div>
 
         <div class="toolbar">
@@ -414,6 +425,7 @@ export function renderParent(main) {
     });
 
     panel.querySelector('[data-action="add-word"]')?.addEventListener("click", () => openWordModal(null));
+    panel.querySelector('[data-action="make-list"]')?.addEventListener("click", () => openCustomListModal(theme, visible));
     panel.querySelector('[data-action="sort-az"]')?.addEventListener("click", () => sortWords("az"));
     panel.querySelector('[data-action="sort-za"]')?.addEventListener("click", () => sortWords("za"));
 
@@ -444,6 +456,62 @@ export function renderParent(main) {
     await library.sortWords(state.themeId, direction);
     showToast("Wörter neu sortiert.", { type: "success", iconName: "check" });
     renderPanel();
+  }
+
+  function openCustomListModal(theme, visibleWords) {
+    if (!theme) return;
+    const sourceWords = Array.isArray(visibleWords) && visibleWords.length ? visibleWords : library.getWords(theme.id);
+    const modal = openModal({
+      title: "Eigene Lernliste erstellen",
+      content: `
+        <form id="custom-list-form" class="form-grid" novalidate>
+          ${field({ id: "cl-name", label: "Name der Liste", value: `Meine Liste – ${theme.name}`, required: true, autofocus: true })}
+          ${field({ id: "cl-emoji", label: "Emoji (optional)", value: "📝", placeholder: "z. B. 📝" })}
+          <div class="field">
+            <span class="field-label">Wörter auswählen</span>
+            <div class="check-list" style="max-height:260px;overflow:auto;border:1px solid var(--c-line);border-radius:12px;padding:10px;">
+              ${sourceWords.map((w) => `
+                <label class="check-row"><input type="checkbox" name="cl-word" value="${esc(w.id)}" checked>
+                  <span>${esc(w.de)} <span class="tiny muted">– ${esc(w.en)}</span></span>
+                </label>`).join("")}
+            </div>
+            <p class="field-hint">Ausgewählte Wörter werden in ein neues Thema kopiert. Der Lernfortschritt der Originalwörter bleibt unverändert.</p>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-ghost" data-close>Abbrechen</button>
+            <button type="submit" class="btn">${icon("plus")} Liste erstellen</button>
+          </div>
+        </form>`,
+    });
+    const form = modal.body.querySelector("#custom-list-form");
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fd = new FormData(form);
+      const name = String(fd.get("cl-name") || "").trim();
+      const emoji = String(fd.get("cl-emoji") || "").trim() || "📝";
+      const ids = new Set(fd.getAll("cl-word").map(String));
+      const selected = sourceWords.filter((w) => ids.has(w.id));
+      if (!name) { showToast("Bitte gib einen Namen ein.", { type: "warn" }); return; }
+      if (!selected.length) { showToast("Bitte wähle mindestens ein Wort aus.", { type: "warn" }); return; }
+      try {
+        const rows = selected.map((w) => ({
+          de: w.de, en: w.en, alternatives: w.alternatives || [], example: w.example || "", emoji: w.emoji || "",
+          imageUrl: w.imageUrl || "", audioUrl: w.audioUrl || "", source: w.source || null,
+        }));
+        const result = await library.applyImport({
+          themeId: null,
+          newTheme: { name, emoji, source: { type: "custom-list", bookId: "", bookName: theme.name } },
+          rows,
+          mode: "add",
+        });
+        modal.close();
+        state.themeId = result.themeId;
+        showToast(`Liste „${name}“ mit ${result.added} Wörtern erstellt.`, { type: "success", iconName: "check" });
+        renderPanel();
+      } catch (err) {
+        showToast(err.message || "Liste konnte nicht erstellt werden.", { type: "error" });
+      }
+    });
   }
 
   function openWordModal(word) {
@@ -808,6 +876,7 @@ export function renderParent(main) {
 
         <div class="import-tabs" role="tablist" aria-label="Import-Quelle">
           ${[
+            ["westermann", "Buch", "menu"],
             ["photo", "Foto", "camera"],
             ["file", "Datei", "download"],
             ["paste", "Einfügen", "pencil"],
@@ -823,7 +892,55 @@ export function renderParent(main) {
 
         <div class="import-source">
           ${
-            imp.source === "photo"
+            imp.source === "westermann"
+              ? `
+              <div class="westermann-import">
+                <div class="callout">
+                  ${icon("cloud")}
+                  <p class="mb-0"><strong>Westermann-Bücher</strong> laden Wörter, Bilder und Audio aus dem öffentlichen Vokabeltrainer-Katalog. Nutze das nur für Bücher, auf die du Zugriff hast.</p>
+                </div>
+                <div class="field-row">
+                  <div class="field grow">
+                    <label for="westermann-query">Buch suchen</label>
+                    <input class="input" id="westermann-query" type="search" value="${esc(imp.westermann.query)}" placeholder="z. B. Camden Market 5">
+                  </div>
+                  <button type="button" class="btn btn-ghost" data-action="westermann-load-catalog" ${imp.westermann.busy ? "disabled" : ""}>
+                    ${icon("refresh")} ${imp.westermann.catalog.length ? "Liste aktualisieren" : "Bücher laden"}
+                  </button>
+                </div>
+                ${imp.westermann.error ? `<div class="callout danger">${icon("info")}<p class="mb-0">${esc(imp.westermann.error)}</p></div>` : ""}
+                ${imp.westermann.busy ? `<div class="callout" role="status">${icon("refresh")}<p class="mb-0">Westermann-Daten werden geladen …</p></div>` : ""}
+                ${(() => {
+                  const q = imp.westermann.query.trim().toLowerCase();
+                  const items = (imp.westermann.catalog || []).filter((b) => !q || `${b.name} ${b.id}`.toLowerCase().includes(q)).slice(0, 30);
+                  if (!imp.westermann.catalog.length) return `<p class="tiny muted mb-0">Noch keine Bücher geladen. Tippe auf „Bücher laden“.</p>`;
+                  if (!items.length) return `<p class="tiny muted mb-0">Kein Buch passt zur Suche.</p>`;
+                  return `<div class="westermann-book-list">${items.map((b) => `
+                    <button type="button" class="westermann-book ${imp.westermann.bookId === b.id ? "is-active" : ""}" data-action="westermann-select-book" data-book-id="${esc(b.id)}">
+                      <span class="westermann-book-name">${esc(b.name)}</span>
+                      <span class="tiny muted">${esc(b.language || "")} · ${b.vocabCount} Wörter</span>
+                    </button>`).join("")}</div>`;
+                })()}
+                ${imp.westermann.book ? `
+                  <div class="westermann-book-detail">
+                    <h3>${esc(imp.westermann.book.name)}</h3>
+                    <p class="tiny muted">${imp.westermann.book.words.length} Wörter geladen${imp.westermann.book.coverUrl ? " · Bilder/Audio verfügbar" : ""}</p>
+                    <div class="field-row">
+                      <button type="button" class="btn btn-ghost btn-small" data-action="westermann-all-chapters">Alle Kapitel</button>
+                      <button type="button" class="btn btn-ghost btn-small" data-action="westermann-no-chapters">Keine Kapitel</button>
+                    </div>
+                    <div class="westermann-chapters">
+                      ${westermann.groupWordsByChapter(imp.westermann.book).map((g) => {
+                        const checked = imp.westermann.selectedChapters.includes(g.id);
+                        return `<label class="check-row"><input type="checkbox" data-westermann-chapter="${esc(g.id)}" ${checked ? "checked" : ""}> <span>${esc(g.name)} <span class="tiny muted">(${g.words.length})</span></span></label>`;
+                      }).join("")}
+                    </div>
+                    <div class="btn-row">
+                      <button type="button" class="btn" data-action="westermann-apply" ${imp.westermann.busy ? "disabled" : ""}>${icon("download")} Auswahl übernehmen</button>
+                    </div>
+                  </div>` : ""}
+              </div>`
+            : imp.source === "photo"
               ? `
               <div class="photo-import">
                 <div class="callout" id="photo-provider-status" role="status">
@@ -1109,6 +1226,75 @@ export function renderParent(main) {
       updateImportSelectionUi(panel);
     });
 
+    /* Westermann */
+    panel.querySelector('[data-action="westermann-load-catalog"]')?.addEventListener("click", async () => {
+      const w = state.import.westermann;
+      w.busy = true; w.error = ""; renderPanel();
+      try { w.catalog = await westermann.fetchBookCatalog({ language: "" }); }
+      catch (e) { w.error = e.message || "Bücherliste konnte nicht geladen werden."; }
+      finally { w.busy = false; renderPanel(); }
+    });
+    panel.querySelector("#westermann-query")?.addEventListener("input", (e) => {
+      state.import.westermann.query = e.target.value;
+      renderPanel();
+      const q = panel.querySelector("#westermann-query");
+      if (q) { q.focus(); q.selectionStart = q.selectionEnd = q.value.length; }
+    });
+    panel.querySelectorAll('[data-action="westermann-select-book"]').forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const w = state.import.westermann;
+        w.bookId = btn.dataset.bookId; w.busy = true; w.error = ""; w.book = null; renderPanel();
+        try {
+          w.book = await westermann.fetchBook(w.bookId);
+          w.selectedChapters = westermann.groupWordsByChapter(w.book).map((g) => g.id);
+          state.import.newName = w.book.name;
+          state.import.newEmoji = "📘";
+          state.import.target = "__new__";
+        } catch (e) { w.error = e.message || "Buch konnte nicht geladen werden."; }
+        finally { w.busy = false; renderPanel(); }
+      });
+    });
+    panel.querySelectorAll("[data-westermann-chapter]").forEach((cb) => {
+      cb.addEventListener("change", () => {
+        const id = cb.dataset.westermannChapter;
+        const set = new Set(state.import.westermann.selectedChapters);
+        if (cb.checked) set.add(id); else set.delete(id);
+        state.import.westermann.selectedChapters = [...set];
+      });
+    });
+    panel.querySelector('[data-action="westermann-all-chapters"]')?.addEventListener("click", () => {
+      const w = state.import.westermann; if (!w.book) return;
+      w.selectedChapters = westermann.groupWordsByChapter(w.book).map((g) => g.id); renderPanel();
+    });
+    panel.querySelector('[data-action="westermann-no-chapters"]')?.addEventListener("click", () => {
+      state.import.westermann.selectedChapters = []; renderPanel();
+    });
+    panel.querySelector('[data-action="westermann-apply"]')?.addEventListener("click", () => {
+      const w = state.import.westermann;
+      if (!w.book) return;
+      const selected = new Set(w.selectedChapters);
+      const rows = w.book.words.filter((word) => selected.has(word.chapter || "_other"));
+      if (!rows.length) { w.error = "Bitte wähle mindestens ein Kapitel aus."; renderPanel(); return; }
+      state.import.fileName = w.book.name;
+      state.import.analysis = {
+        entries: rows.map((r, i) => ({
+          ...r, line: i + 1, id: null, errors: [], warnings: [], existsByGerman: false, duplicateInFile: false, selected: true,
+        })),
+        validEntries: rows,
+        globalErrors: [],
+        warnings: [`Quelle: Westermann „${w.book.name}“. Bilder und Audio werden als Links übernommen und bei Internetverbindung angezeigt.`],
+        delimiter: ";",
+        hasHeader: true,
+        themeId: state.import.target === "__new__" ? null : state.import.target,
+        existingCount: 0,
+        counts: { total: rows.length, valid: rows.length, errors: 0, newRows: rows.length, existingRows: 0, duplicateRows: 0 },
+      };
+      state.import.error = "";
+      state.import.target = "__new__";
+      state.import.newName = w.book.name;
+      renderPanel();
+    });
+
     /* Foto */
     const photoInput = panel.querySelector("#photo-file");
     const photoDrop = panel.querySelector(".photo-dropzone");
@@ -1306,9 +1492,17 @@ export function renderParent(main) {
     const imp = state.import;
     if (!imp.analysis) return;
     const themeId = imp.target === "__new__" ? null : imp.target;
+    const westermannBook = imp.source === "westermann" ? imp.westermann?.book : null;
     const newTheme =
       imp.target === "__new__"
-        ? { name: imp.newName.trim(), emoji: imp.newEmoji.trim(), unlockPoints: 0 }
+        ? {
+            name: imp.newName.trim(),
+            emoji: imp.newEmoji.trim(),
+            unlockPoints: 0,
+            source: westermannBook
+              ? { type: "westermann-book", bookId: westermannBook.id, bookName: westermannBook.name }
+              : undefined,
+          }
         : null;
 
     if (newTheme && !newTheme.name) {

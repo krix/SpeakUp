@@ -243,23 +243,13 @@ function runRound(main, config, onRestart) {
 
   /* --- Aufräumen pro Frage (Pad, Erkennung, Timer) --- */
   function cleanupQuestion() {
-    if (state.timer) {
-      clearTimeout(state.timer);
-      state.timer = null;
-    }
-    if (state.recognizer) {
-      try {
-        state.recognizer.abort();
-      } catch {
-        /* ignorieren */
-      }
-      state.recognizer = null;
-    }
-    if (state.pad) {
-      state.pad.destroy();
-      state.pad = null;
-    }
-    stopSpeaking();
+    clearTimeout(state.timer);
+    state.timer = null;
+    state.recognizer?.abort?.();
+    state.recognizer = null;
+    stopWordAudio();
+    pad?.destroy();
+    pad = null;
   }
 
   function cleanup() {
@@ -311,6 +301,9 @@ function runRound(main, config, onRestart) {
 
     if (mode === "speak") bindSpeakQuestion(word);
     else bindWritingQuestion(word, mode);
+    stage.querySelectorAll('[data-action="play-word-audio"]').forEach((btn) => {
+      btn.addEventListener("click", () => playWordAudio(word));
+    });
 
     updateProgress();
 
@@ -339,12 +332,15 @@ function runRound(main, config, onRestart) {
         <div class="question-card" tabindex="-1" aria-labelledby="question-title">
           ${badge}
           <div class="question-main">
-            <span class="prompt-emoji" aria-hidden="true">${esc(emoji)}</span>
+            ${word.imageUrl
+              ? `<figure class="prompt-media" aria-hidden="true"><img class="prompt-image" src="${esc(word.imageUrl)}" alt="" loading="lazy" decoding="async"></figure>`
+              : `<span class="prompt-emoji" aria-hidden="true">${esc(emoji)}</span>`}
             <div>
               <h1 class="prompt-de" id="question-title">${esc(word.de)}</h1>
               <p class="prompt-sub">Sag das englische Wort laut.</p>
             </div>
           </div>
+          ${word.audioUrl ? `<div class="prompt-audio"><button type="button" class="btn-link" data-action="play-word-audio">${icon("speaker")} Wort anhören</button></div>` : ""}
           ${example}
           <p class="instruction">Tippe auf das Mikrofon und sprich <strong>deutlich</strong>.
             ${
@@ -376,7 +372,9 @@ function runRound(main, config, onRestart) {
         <div class="question-card" tabindex="-1" aria-labelledby="question-title">
           ${badge}
           <div class="question-main">
-            <span class="prompt-emoji" aria-hidden="true">🔊</span>
+            ${word.imageUrl
+              ? `<figure class="prompt-media" aria-hidden="true"><img class="prompt-image" src="${esc(word.imageUrl)}" alt="" loading="lazy" decoding="async"></figure>`
+              : `<span class="prompt-emoji" aria-hidden="true">🔊</span>`}
             <div>
               <h1 class="prompt-de" id="question-title">Hör gut zu!</h1>
               <p class="prompt-sub">Schreib das englische Wort auf.</p>
@@ -400,12 +398,15 @@ function runRound(main, config, onRestart) {
       <div class="question-card" tabindex="-1" aria-labelledby="question-title">
         ${badge}
         <div class="question-main">
-          <span class="prompt-emoji" aria-hidden="true">${esc(emoji)}</span>
+          ${word.imageUrl
+            ? `<figure class="prompt-media" aria-hidden="true"><img class="prompt-image" src="${esc(word.imageUrl)}" alt="" loading="lazy" decoding="async"></figure>`
+            : `<span class="prompt-emoji" aria-hidden="true">${esc(emoji)}</span>`}
           <div>
             <h1 class="prompt-de" id="question-title">${esc(word.de)}</h1>
             <p class="prompt-sub">Wie heißt das auf Englisch?</p>
           </div>
         </div>
+        ${word.audioUrl ? `<div class="prompt-audio"><button type="button" class="btn-link" data-action="play-word-audio">${icon("speaker")} Wort anhören</button></div>` : ""}
         ${example}
         ${renderWritingArea(mode)}
       </div>`;
@@ -722,7 +723,8 @@ function runRound(main, config, onRestart) {
       }
     });
 
-    stage.querySelector('[data-action="speak-word"]')?.addEventListener("click", () => speakWord(word.en));
+    stage.querySelector('[data-action="speak-word"]')?.addEventListener("click", () => playWordAudio(word));
+    stage.querySelector('[data-action="play-word-audio"]')?.addEventListener("click", () => playWordAudio(word));
     stage.querySelector('[data-action="reveal"]')?.addEventListener("click", (event) => {
       const slot = stage.querySelector("#reveal-slot");
       if (!slot) return;
@@ -736,7 +738,8 @@ function runRound(main, config, onRestart) {
   }
 
   function bindSpeakReplay(word) {
-    stage.querySelector('[data-action="speak-word"]')?.addEventListener("click", () => speakWord(word.en));
+    stage.querySelector('[data-action="speak-word"]')?.addEventListener("click", () => playWordAudio(word));
+    stage.querySelector('[data-action="play-word-audio"]')?.addEventListener("click", () => playWordAudio(word));
   }
 
   function setPadStatus(text, kind = "") {
@@ -1115,10 +1118,13 @@ function runRound(main, config, onRestart) {
         </div>
       </div>
       <div class="feedback-solution">
-        <span class="small muted">${esc(word.de)}</span><br>
-        <strong>${esc(word.en)}</strong>
-        ${alternativesLine}
-        ${word.example ? `<p class="mb-0 mt-2">${icon("speaker")} <em>${esc(word.example)}</em></p>` : ""}
+        ${word.imageUrl ? `<img class="feedback-image" src="${esc(word.imageUrl)}" alt="" loading="lazy" decoding="async">` : ""}
+        <div>
+          <span class="small muted">${esc(word.de)}</span><br>
+          <strong>${esc(word.en)}</strong>
+          ${alternativesLine}
+          ${word.example ? `<p class="mb-0 mt-2">${icon("speaker")} <em>${esc(word.example)}</em></p>` : ""}
+        </div>
       </div>
       ${detected ? `<p class="detected">Erkannt: „${esc(detected)}“</p>` : ""}
       ${acceptedLine}
@@ -1136,7 +1142,8 @@ function runRound(main, config, onRestart) {
       </div>`;
 
     stage.append(card);
-    card.querySelector('[data-action="speak-word"]')?.addEventListener("click", () => speakWord(word.en));
+    card.querySelector('[data-action="speak-word"]')?.addEventListener("click", () => playWordAudio(word));
+    card.querySelector('[data-action="play-word-audio"]')?.addEventListener("click", () => playWordAudio(word));
     card.querySelector('[data-action="accept-correct"]')?.addEventListener("click", () => {
       acceptAnswer(acceptance, card);
     });
@@ -1339,8 +1346,41 @@ function runRound(main, config, onRestart) {
   }
 
   /* --- Sprachausgabe ---------- */
+  let wordAudio = null;
+  function stopWordAudio() {
+    if (wordAudio) {
+      try { wordAudio.pause(); } catch {}
+      try { wordAudio.currentTime = 0; } catch {}
+      wordAudio = null;
+    }
+  }
+
+  function playWordAudio(word, { fallbackTts = true } = {}) {
+    if (!state.alive) return;
+    stopWordAudio();
+    stopSpeaking();
+    const url = word?.audioUrl || "";
+    if (url) {
+      const audio = new Audio(url);
+      wordAudio = audio;
+      audio.preload = "auto";
+      audio.play().catch(() => {
+        if (wordAudio === audio) wordAudio = null;
+        if (fallbackTts) speakWord(word?.en);
+      });
+      audio.addEventListener("ended", () => { if (wordAudio === audio) wordAudio = null; }, { once: true });
+      audio.addEventListener("error", () => {
+        if (wordAudio === audio) wordAudio = null;
+        if (fallbackTts) speakWord(word?.en);
+      }, { once: true });
+      return;
+    }
+    if (fallbackTts) speakWord(word?.en);
+  }
+
   function speakWord(text) {
     if (!text || !state.alive) return;
+    stopWordAudio();
     unlockTts();
     const settingsNow = learner.getSettings();
     speak(text, { rate: settingsNow.speechRate || 0.9, lang: "en-GB" });
