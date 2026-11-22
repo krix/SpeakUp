@@ -1,6 +1,7 @@
 /** Startseite: Modus wählen, Themenwelten öffnen, Tagesziel sehen. */
 import * as library from "../core/library.js";
 import * as learner from "../core/learner.js";
+import * as profiles from "../core/profiles.js";
 import bus from "../core/bus.js";
 import { icon, esc, showToast } from "../ui/dom.js";
 import { mascot, MASCOT_LINES, randomLine } from "../ui/mascot.js";
@@ -31,6 +32,7 @@ function modeLine(mode) {
 
 export function renderHome(main) {
   const profile = learner.getProfile();
+  const activeProfile = profiles.isReady() ? profiles.getActiveProfile() : null;
   const level = learner.getLevelInfo();
   const settings = learner.getSettings();
   const mode = MODES.some((item) => item.id === settings.mode) ? settings.mode : "mix";
@@ -141,7 +143,7 @@ export function renderHome(main) {
     <div class="home">
       <section class="home-hero" aria-labelledby="hero-title">
         <div class="hero-copy">
-          <span class="hero-kicker">${icon("star")} ${esc(greeting(profile.name))}</span>
+          <span class="hero-kicker">${icon("star")} ${esc(greeting(activeProfile?.name))}</span>
           <h1 class="hero-title" id="hero-title">Bereit für Englisch?</h1>
           <p class="hero-text" id="hero-line">${esc(modeLine(mode))}</p>
           <div class="hero-stats">
