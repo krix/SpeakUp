@@ -293,20 +293,18 @@ export function getLevelInfo(points = profile?.points || 0) {
 }
 
 /**
- * Wählt Wörter für eine Runde aus:
- * 60 % fällige Wiederholungen, 40 % neue Wörter, Rest aus dem Rest.
+ * Wählt Wörter für eine Runde aus.
+ * Bei mehreren Themen (z. B. "Alle Themen") werden Wörter themenübergreifend
+ * gemischt, damit nicht nur ein zufälliges Thema dominiert.
+ * Priorität bleibt: 60 % fällige Wiederholungen, 40 % neue Wörter, Rest danach.
  */
 export function selectSessionWords(words, count = 10) {
   const now = Date.now();
-  const due = [];
-  const fresh = [];
-  const later = [];
-
+  const byTheme = new Map();
   for (const word of words) {
-    const record = progress.get(word.id);
-    if (!record || record.seen === 0) fresh.push(word);
-    else if (!record.dueAt || record.dueAt <= now) due.push(word);
-    else later.push(word);
+    const themeId = word?.themeId || "_none";
+    if (!byTheme.has(themeId)) byTheme.set(themeId, []);
+    byTheme.get(themeId).push(word);
   }
 
   const byDue = (a, b) => (progress.get(a.id)?.dueAt || 0) - (progress.get(b.id)?.dueAt || 0);
@@ -315,23 +313,58 @@ export function selectSessionWords(words, count = 10) {
     const pb = progress.get(b.id);
     return (pa?.box || 1) - (pb?.box || 1) || (pa?.correct || 0) - (pb?.correct || 0);
   };
-  due.sort(byDue);
-  later.sort(byBox);
+  const shuffle = (list) => {
+    for (let i = list.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [list[i], list[j]] = [list[j], list[i]];
+    }
+    return list;
+  };
 
+  // Pro Thema priorisierte Warteschlange aufbauen.
+  const themeQueues = [];
+  for (const [themeId, list] of byTheme.entries()) {
+    const due = [];
+    const fresh = [];
+    const later = [];
+    for (const word of list) {
+      const record = progress.get(word.id);
+      if (!record || record.seen === 0) fresh.push(word);
+      else if (!record.dueAt || record.dueAt <= now) due.push(word);
+      else later.push(word);
+    }
+    due.sort(byDue);
+    later.sort(byBox);
+    shuffle(fresh);
+    const queue = [];
+    const dueTarget = Math.min(due.length, Math.ceil(count * 0.6));
+    queue.push(...due.slice(0, dueTarget));
+    const freshTarget = Math.min(fresh.length, Math.max(0, count - queue.length));
+    queue.push(...fresh.slice(0, freshTarget));
+    queue.push(...due.slice(dueTarget), ...later, ...fresh.slice(freshTarget));
+    themeQueues.push({ themeId, queue });
+  }
+
+  // Themen mischen, dann round-robin ziehen – so enthält "Alle Themen"
+  // wirklich Wörter aus verschiedenen Themen, sofern vorhanden.
+  shuffle(themeQueues);
   const picked = [];
-  const dueTarget = Math.min(due.length, Math.ceil(count * 0.6));
-  picked.push(...due.slice(0, dueTarget));
-  const freshTarget = Math.min(fresh.length, count - picked.length);
-  picked.push(...fresh.slice(0, freshTarget));
-  const rest = [...due.slice(dueTarget), ...later, ...fresh.slice(freshTarget)];
-  while (picked.length < count && rest.length) picked.push(rest.shift());
+  const seen = new Set();
+  let active = true;
+  while (picked.length < count && active) {
+    active = false;
+    for (const entry of themeQueues) {
+      while (entry.queue.length && seen.has(entry.queue[0].id)) entry.queue.shift();
+      if (!entry.queue.length) continue;
+      picked.push(entry.queue.shift());
+      seen.add(picked[picked.length - 1].id);
+      active = true;
+      if (picked.length >= count) break;
+    }
+  }
 
   // Reihenfolge innerhalb der Runde mischen, damit die Modi variieren.
-  for (let i = picked.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [picked[i], picked[j]] = [picked[j], picked[i]];
-  }
-  return picked.slice(0, count);
+  return shuffle(picked).slice(0, count);
 }
 
 /** Eine Antwort innerhalb einer Runde speichern (sofort persistiert). */
