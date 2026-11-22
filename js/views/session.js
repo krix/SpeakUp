@@ -248,8 +248,8 @@ function runRound(main, config, onRestart) {
     state.recognizer?.abort?.();
     state.recognizer = null;
     stopWordAudio();
-    pad?.destroy();
-    pad = null;
+    state.pad?.destroy();
+    state.pad = null;
   }
 
   function cleanup() {
