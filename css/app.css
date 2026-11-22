@@ -418,7 +418,7 @@ main:focus { outline: none; }
 .theme-card {
   position: relative; overflow: hidden;
   display: flex; flex-direction: column; gap: 10px;
-  min-height: 186px; padding: 18px;
+  min-height: 214px; padding: 18px;
   text-align: left;
   background: var(--c-surface);
   border: 2px solid var(--c-line);
@@ -436,9 +436,10 @@ main:focus { outline: none; }
 .theme-card h3 { margin: 0; font-size: 1.16rem; position: relative; z-index: 1; }
 .theme-card .theme-name { margin: 0; font-size: 1.16rem; font-weight: 900; position: relative; z-index: 1; }
 .theme-card-meta { color: var(--c-muted); font-size: .82rem; font-weight: 700; position: relative; z-index: 1; }
-.theme-progress { margin-top: auto; position: relative; z-index: 1; }
-.theme-progress-top { display: flex; justify-content: space-between; font-size: .74rem; font-weight: 800; color: var(--c-muted); margin-bottom: 5px; }
+.theme-progress { margin-top: auto; position: relative; z-index: 1; display: grid; gap: 4px; }
+.theme-progress-top { display: flex; justify-content: space-between; font-size: .74rem; font-weight: 800; color: var(--c-muted); margin-bottom: 1px; }
 .theme-progress .progress-track { height: 9px; }
+.theme-progress .progress-track.is-practiced .progress-fill { background: linear-gradient(90deg, #4ea3ff, #2f7be6); }
 .theme-card .go { display: flex; align-items: center; gap: 6px; color: var(--c-primary); font-weight: 900; font-size: .86rem; position: relative; z-index: 1; }
 .theme-card.is-locked { background: #F7F2E9; border-style: dashed; }
 .theme-card.is-locked .theme-card-emoji { filter: grayscale(1); opacity: .55; }
@@ -1250,7 +1251,7 @@ table.preview .select-col { width: 56px; text-align: center; }
   .home-hero { grid-template-columns: 1fr; }
   .hero-mascot { display: none; }
   .mode-name { font-size: .88rem; }
-  .theme-card { min-height: 170px; }
+  .theme-card { min-height: 196px; }
 }
 @media (max-height: 500px) and (orientation: landscape) {
   :root { --header-h: 58px; }
@@ -1342,12 +1343,13 @@ table.preview .select-col { width: 56px; text-align: center; }
   .mode-desc { font-size: .66rem; }
   .mode-check { right: 8px; top: 6px; }
   .theme-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-  .theme-card { min-height: 84px; padding: 6px 10px; gap: 3px; border-radius: 14px; }
+  .theme-card { min-height: 120px; padding: 6px 10px; gap: 3px; border-radius: 14px; }
   .theme-card-emoji { font-size: 1.7rem; }
   .theme-name, .theme-card h3 { font-size: .95rem; }
-  .theme-card-meta { font-size: .68rem; }
-  .theme-progress-top { font-size: .62rem; margin-bottom: 3px; }
-  .theme-progress .progress-track { height: 6px; }
+  .theme-card-meta { font-size: .64rem; line-height: 1.25; }
+  .theme-progress { gap: 2px; }
+  .theme-progress-top { font-size: .58rem; margin-bottom: 0; }
+  .theme-progress .progress-track { height: 5px; }
   .theme-card .go { font-size: .68rem; }
   .lock-chip { top: 8px; right: 8px; padding: 3px 7px; font-size: .62rem; }
 

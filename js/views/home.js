@@ -77,18 +77,23 @@ export function renderHome(main) {
   const renderThemeCard = (theme, index) => {
     const stats = library.getThemeStats(theme.id, progress);
     const isLocked = !library.isThemeUnlocked(theme, profile.points);
+    const practicedPercent = stats.total ? Math.round((stats.started / stats.total) * 100) : 0;
     const percent = stats.total ? Math.round((stats.mastered / stats.total) * 100) : 0;
     return `
       <button type="button" class="theme-card ${isLocked ? "is-locked" : ""}" data-theme="${esc(theme.id)}"
               style="--theme-tint:${THEME_TINTS[index % THEME_TINTS.length]}"
-              aria-label="${esc(theme.name)}: ${stats.total} Wörter, ${stats.mastered} gemeistert${isLocked ? ", gesperrt" : ""}">
+              aria-label="${esc(theme.name)}: ${stats.total} Wörter, ${practicedPercent} Prozent geübt, ${percent} Prozent gemeistert${isLocked ? ", gesperrt" : ""}">
         ${isLocked ? `<span class="lock-chip">${icon("lock")} ${theme.unlockPoints} Punkte</span>` : ""}
         <span class="theme-card-emoji" aria-hidden="true">${esc(theme.emoji)}</span>
         <span class="theme-name">${esc(theme.name)} ${themeMedal(percent) ? `<span class="theme-medal" aria-label="Themen-Medaille" title="Themen-Medaille">${themeMedal(percent)}</span>` : ""}</span>
-        <span class="theme-card-meta">${stats.total} ${stats.total === 1 ? "Wort" : "Wörter"}${stats.mastered ? ` · ${stats.mastered} gemeistert` : ""}</span>
+        <span class="theme-card-meta">${stats.total} ${stats.total === 1 ? "Wort" : "Wörter"} · ${stats.started} geübt · ${stats.mastered} gemeistert</span>
         <span class="theme-progress">
+          <span class="theme-progress-top"><span>Geübt</span><span>${practicedPercent} %</span></span>
+          <span class="progress-track is-practiced" role="progressbar" aria-valuenow="${practicedPercent}" aria-valuemin="0" aria-valuemax="100" aria-label="Geübt in ${esc(theme.name)}">
+            <span class="progress-fill" style="width:${practicedPercent}%"></span>
+          </span>
           <span class="theme-progress-top"><span>Gemeistert</span><span>${percent} %</span></span>
-          <span class="progress-track" role="progressbar" aria-valuenow="${percent}" aria-valuemin="0" aria-valuemax="100" aria-label="Fortschritt in ${esc(theme.name)}">
+          <span class="progress-track" role="progressbar" aria-valuenow="${percent}" aria-valuemin="0" aria-valuemax="100" aria-label="Gemeistert in ${esc(theme.name)}">
             <span class="progress-fill ${percent >= 100 ? "green" : ""}" style="width:${percent}%"></span>
           </span>
         </span>
