@@ -410,6 +410,11 @@ main:focus { outline: none; }
 .home-book-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
 .home-book-head h3 { margin: 0; font-size: 1rem; display: flex; align-items: center; gap: 8px; }
 .home-book-head .icon { width: 18px; height: 18px; color: var(--c-primary); }
+.home-mini-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+.mini-stat { padding: 12px 10px; border: 1px solid var(--c-line); border-radius: var(--r-md); background: rgba(255,255,255,.8); text-align: center; }
+.mini-stat strong { display: block; font-size: 1.2rem; line-height: 1; color: var(--c-primary); }
+.mini-stat span { display: block; margin-top: 4px; font-size: .72rem; font-weight: 800; color: var(--c-muted); text-transform: uppercase; letter-spacing: .02em; }
+@media (max-width: 640px) { .home-mini-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .theme-card {
   position: relative; overflow: hidden;
   display: flex; flex-direction: column; gap: 10px;
