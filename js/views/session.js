@@ -380,7 +380,7 @@ function runRound(main, config, onRestart) {
               <p class="prompt-sub">Sag das englische Wort laut.</p>
             </div>
           </div>
-          ${word.audioUrl ? `<div class="prompt-audio"><button type="button" class="btn-link" data-action="play-word-audio">${icon("speaker")} Wort anhören</button></div>` : ""}
+          
           ${example}
           <p class="instruction">Tippe auf das Mikrofon und sprich <strong>deutlich</strong>.
             ${
@@ -1186,6 +1186,8 @@ function runRound(main, config, onRestart) {
     card.querySelectorAll('[data-action="speak-example"]').forEach((btn) => {
       btn.addEventListener("click", () => speakWord(exampleSpeechText(word.example)));
     });
+    // Bei Aufl?sung immer einmal das Wort vorspielen.
+    playWordAudio(word);
     card.querySelector('[data-action="play-word-audio"]')?.addEventListener("click", () => playWordAudio(word));
     card.querySelector('[data-action="accept-correct"]')?.addEventListener("click", () => {
       acceptAnswer(acceptance, card);
