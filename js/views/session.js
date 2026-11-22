@@ -94,13 +94,15 @@ function buildAnswerPattern(word) {
 }
 
 function renderMarkedExample(example) {
-  // Erst Fokus-Marker einsetzen, dann sicher als Rich-Text rendern.
+  // Marker vor dem Sanitizen einsetzen, damit sanitizeRichText sie nicht escaped.
   let text = String(example || "");
-  text = text.replace(/_([^_]+)_/g, (_, term) => `<strong class="example-focus">${term}</strong>`);
+  text = text.replace(/_([^_]+)_/g, (_, term) => `\u0000${term}\u0001`);
   text = text.replace(/(^|[^\p{L}\p{N}])(["“„'])([^\n"'“”„<>]+?)(["”"'])(?=$|[^\p{L}\p{N}])/giu, (_, prefix, _q1, word, _q2) => {
-    return `${prefix}<strong class="example-focus">${word}</strong>`;
+    return `${prefix}\u0000${word}\u0001`;
   });
-  return sanitizeRichText(text);
+  let html = sanitizeRichText(text);
+  html = html.replace(/\u0000/g, '<strong class="example-focus">').replace(/\u0001/g, "</strong>");
+  return html;
 }
 
 /**
