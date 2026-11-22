@@ -1184,6 +1184,7 @@ function runRound(main, config, onRestart) {
         <div>
           <span class="small muted">${esc(word.de)}</span><br>
           <strong>${esc(word.en)}</strong>
+          <button type="button" class="btn-link example-inline-audio" data-action="speak-word" aria-label="Wort anhören">${icon("speaker")}</button>
           ${alternativesLine}
           ${word.example ? `<p class="mb-0 mt-2 example-feedback"><button type="button" class="btn-link" data-action="speak-example">${icon("speaker")}</button> <em>${renderMarkedExample(normalizeExampleText(word.example))}</em></p>` : ""}
         </div>
@@ -1196,7 +1197,6 @@ function runRound(main, config, onRestart) {
         <button type="button" class="btn btn-soft btn-small" data-action="speak-word">
           ${icon("speaker")} Nochmal hören
         </button>
-        ${speechRetry ? `<button type="button" class="btn-link" data-action="retry-speech-inline">${icon("mic")} Nochmal sprechen</button>` : ""}
         ${!correct ? `<button type="button" class="btn-link" data-action="show-typing">${icon("keyboard")} Tippen üben</button>` : ""}
         <button type="button" class="btn btn-primary" data-action="next">
           Weiter ${icon("forward")}
@@ -1208,8 +1208,14 @@ function runRound(main, config, onRestart) {
     card.querySelectorAll('[data-action="speak-example"]').forEach((btn) => {
       btn.addEventListener("click", () => speakWord(exampleSpeechText(word.example)));
     });
-    // Bei Aufl?sung immer einmal das Wort vorspielen.
-    playWordAudio(word);
+    // Bei Auflösung: erst Wort, dann Beispielsatz automatisch sprechen.
+    const exampleText = exampleSpeechText(word.example);
+    playWordAudio(word, {
+      fallbackTts: true,
+      onEnd: () => {
+        if (exampleText) speakWord(exampleText);
+      },
+    });
     card.querySelector('[data-action="play-word-audio"]')?.addEventListener("click", () => playWordAudio(word));
     card.querySelector('[data-action="accept-correct"]')?.addEventListener("click", () => {
       acceptAnswer(acceptance, card);
@@ -1422,10 +1428,11 @@ function runRound(main, config, onRestart) {
     }
   }
 
-  function playWordAudio(word, { fallbackTts = true } = {}) {
+  function playWordAudio(word, { fallbackTts = true, onEnd = null } = {}) {
     if (!state.alive) return;
     stopWordAudio();
     stopSpeaking();
+    const finish = () => { try { onEnd?.(); } catch (e) { console.error(e); } };
     const url = word?.audioUrl || "";
     if (url) {
       const audio = new Audio(url);
@@ -1433,24 +1440,27 @@ function runRound(main, config, onRestart) {
       audio.preload = "auto";
       audio.play().catch(() => {
         if (wordAudio === audio) wordAudio = null;
-        if (fallbackTts) speakWord(word?.en);
+        if (fallbackTts) speakWord(word?.en, { onEnd: finish });
+        else finish();
       });
-      audio.addEventListener("ended", () => { if (wordAudio === audio) wordAudio = null; }, { once: true });
+      audio.addEventListener("ended", () => { if (wordAudio === audio) wordAudio = null; finish(); }, { once: true });
       audio.addEventListener("error", () => {
         if (wordAudio === audio) wordAudio = null;
-        if (fallbackTts) speakWord(word?.en);
+        if (fallbackTts) speakWord(word?.en, { onEnd: finish });
+        else finish();
       }, { once: true });
       return;
     }
-    if (fallbackTts) speakWord(word?.en);
+    if (fallbackTts) speakWord(word?.en, { onEnd: finish });
+    else finish();
   }
 
-  function speakWord(text) {
+  function speakWord(text, { onEnd = null } = {}) {
     if (!text || !state.alive) return;
     stopWordAudio();
     unlockTts();
     const settingsNow = learner.getSettings();
-    speak(text, { rate: settingsNow.speechRate || 0.9, lang: "en-GB" });
+    speak(text, { rate: settingsNow.speechRate || 0.9, lang: "en-GB", onEnd });
   }
 
   /* --- Beenden ---------- */

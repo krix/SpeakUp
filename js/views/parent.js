@@ -638,12 +638,53 @@ export function renderParent(main) {
     const progress = learner.getProgressMap();
     const points = learner.getProfile().points;
 
+    const groups = [];
+    const bookGroups = new Map();
+    for (const theme of themes) {
+      const bookId = theme.source?.type === "westermann-book" ? (theme.source.bookId || theme.source.bookName || theme.id) : "";
+      if (bookId) {
+        let g = bookGroups.get(bookId);
+        if (!g) {
+          g = { kind: "book", id: bookId, name: theme.source.bookName || "Westermann-Buch", themes: [] };
+          bookGroups.set(bookId, g);
+          groups.push(g);
+        }
+        g.themes.push(theme);
+      } else {
+        groups.push({ kind: "theme", theme });
+      }
+    }
+
+    const renderThemeRow = (theme, index, total, nested = false) => {
+      const stats = library.getThemeStats(theme.id, progress);
+      return `
+        <div class="theme-admin-row ${nested ? "is-nested" : ""}">
+          <span class="emoji" aria-hidden="true">${esc(theme.emoji)}</span>
+          <div>
+            <div class="name">${esc(theme.name)}</div>
+            <div class="meta">
+              ${plural(stats.total, "Wort", "Wörter")} · ${stats.mastered} gemeistert ·
+              ${theme.unlockPoints > 0 ? `ab ${theme.unlockPoints} Punkten` : "sofort frei"} ·
+              ${theme.origin === "default" ? "Standard" : "eigenes Thema"}
+            </div>
+          </div>
+          <div class="actions">
+            <button type="button" class="btn btn-soft btn-small" data-theme-action="manage" data-id="${esc(theme.id)}">Wörter</button>
+            <button type="button" class="btn btn-ghost btn-small" data-theme-action="export" data-id="${esc(theme.id)}">${icon("download")} CSV</button>
+            <button type="button" class="icon-btn tiny-btn" data-theme-action="up" data-id="${esc(theme.id)}" aria-label="Nach oben" ${index === 0 ? "disabled" : ""}>${icon("back", "icon-arrow-up")}</button>
+            <button type="button" class="icon-btn tiny-btn" data-theme-action="down" data-id="${esc(theme.id)}" aria-label="Nach unten" ${index === total - 1 ? "disabled" : ""}>${icon("forward", "icon-arrow-down")}</button>
+            <button type="button" class="icon-btn tiny-btn" data-theme-action="edit" data-id="${esc(theme.id)}" aria-label="Thema bearbeiten">${icon("pencil")}</button>
+            <button type="button" class="icon-btn tiny-btn" data-theme-action="delete" data-id="${esc(theme.id)}" aria-label="Thema löschen">${icon("trash")}</button>
+          </div>
+        </div>`;
+    };
+
     panel.innerHTML = `
       <div class="panel">
         <div class="panel-head">
           <div>
             <h2>Themen</h2>
-            <p>${plural(themes.length, "Thema", "Themen")} · Reihenfolge bestimmt die Startseite</p>
+            <p>${plural(themes.length, "Thema", "Themen")} · importierte Buchkapitel werden nach Buch gruppiert</p>
           </div>
           <div class="row">
             <button type="button" class="btn btn-ghost btn-small" data-action="sort-themes" ${themes.length > 1 ? "" : "disabled"}>A–Z</button>
@@ -654,31 +695,28 @@ export function renderParent(main) {
         ${
           themes.length
             ? `<div class="theme-admin-list">
-                ${themes
-                  .map((theme, index) => {
-                    const stats = library.getThemeStats(theme.id, progress);
-                    return `
-                    <div class="theme-admin-row">
-                      <span class="emoji" aria-hidden="true">${esc(theme.emoji)}</span>
-                      <div>
-                        <div class="name">${esc(theme.name)}</div>
-                        <div class="meta">
-                          ${plural(stats.total, "Wort", "Wörter")} · ${stats.mastered} gemeistert ·
-                          ${theme.unlockPoints > 0 ? `ab ${theme.unlockPoints} Punkten` : "sofort frei"} ·
-                          ${theme.origin === "default" ? "Standard" : "eigenes Thema"}
+                ${groups.map((group) => {
+                  if (group.kind === "theme") {
+                    const index = themes.findIndex((t) => t.id === group.theme.id);
+                    return renderThemeRow(group.theme, index, themes.length);
+                  }
+                  const totalWords = group.themes.reduce((s, t) => s + library.getWords(t.id).length, 0);
+                  return `
+                    <section class="theme-book-group">
+                      <div class="theme-book-head">
+                        <div>
+                          <strong>${icon("book")} ${esc(group.name)}</strong>
+                          <div class="tiny muted">${group.themes.length} Kapitel · ${totalWords} Wörter</div>
                         </div>
                       </div>
-                      <div class="actions">
-                        <button type="button" class="btn btn-soft btn-small" data-theme-action="manage" data-id="${esc(theme.id)}">Wörter</button>
-                        <button type="button" class="btn btn-ghost btn-small" data-theme-action="export" data-id="${esc(theme.id)}">${icon("download")} CSV</button>
-                        <button type="button" class="icon-btn tiny-btn" data-theme-action="up" data-id="${esc(theme.id)}" aria-label="Nach oben" ${index === 0 ? "disabled" : ""}>${icon("back", "icon-arrow-up")}</button>
-                        <button type="button" class="icon-btn tiny-btn" data-theme-action="down" data-id="${esc(theme.id)}" aria-label="Nach unten" ${index === themes.length - 1 ? "disabled" : ""}>${icon("forward", "icon-arrow-down")}</button>
-                        <button type="button" class="icon-btn tiny-btn" data-theme-action="edit" data-id="${esc(theme.id)}" aria-label="Thema bearbeiten">${icon("pencil")}</button>
-                        <button type="button" class="icon-btn tiny-btn" data-theme-action="delete" data-id="${esc(theme.id)}" aria-label="Thema löschen">${icon("trash")}</button>
+                      <div class="theme-book-chapters">
+                        ${group.themes.map((theme, idx) => {
+                          const index = themes.findIndex((t) => t.id === theme.id);
+                          return renderThemeRow(theme, index, themes.length, true);
+                        }).join("")}
                       </div>
-                    </div>`;
-                  })
-                  .join("")}
+                    </section>`;
+                }).join("")}
               </div>`
             : `<div class="table-empty">Noch keine Themen. Lege das erste an!</div>`
         }

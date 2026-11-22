@@ -68,8 +68,11 @@ export function stopSpeaking() {
  * Spricht englischen (oder deutschen) Text.
  * @returns {Promise<boolean>} true, wenn die Ausgabe beendet wurde.
  */
-export function speak(text, { rate = 0.9, lang = null, pitch = 1.03 } = {}) {
-  if (!isTtsSupported() || !text) return Promise.resolve(false);
+export function speak(text, { rate = 0.9, lang = null, pitch = 1.03, onEnd = null } = {}) {
+  if (!isTtsSupported() || !text) {
+    onEnd?.(false);
+    return Promise.resolve(false);
+  }
   stopSpeaking();
 
   return new Promise((resolve) => {
@@ -81,6 +84,7 @@ export function speak(text, { rate = 0.9, lang = null, pitch = 1.03 } = {}) {
       activeResolve = null;
       activeUtterance = null;
       resolve(ok);
+      try { onEnd?.(ok); } catch {}
     };
 
     const utterance = new SpeechSynthesisUtterance(String(text));
@@ -97,7 +101,7 @@ export function speak(text, { rate = 0.9, lang = null, pitch = 1.03 } = {}) {
     utterance.onend = () => finish(true);
     utterance.onerror = () => finish(false);
 
-    const timeout = setTimeout(() => finish(false), 9000);
+    const timeout = setTimeout(() => finish(false), 12000);
     try {
       synth.speak(utterance);
     } catch {
