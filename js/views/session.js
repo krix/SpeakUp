@@ -457,7 +457,6 @@ function runRound(main, config, onRestart) {
             <p class="prompt-sub">Wie heißt das auf Englisch?</p>
           </div>
         </div>
-        ${word.audioUrl ? `<div class="prompt-audio"><button type="button" class="btn-link" data-action="play-word-audio">${icon("speaker")} Wort anhören</button></div>` : ""}
         ${example}
         ${renderWritingArea(mode)}
       </div>`;
@@ -487,6 +486,7 @@ function runRound(main, config, onRestart) {
             <button type="button" class="btn-link" data-action="show-typing">
               ${icon("keyboard")} Lieber tippen
             </button>
+            ${mode === "write" && state.current?.word?.audioUrl ? `<button type="button" class="btn-link" data-action="play-word-help">${icon("speaker")} Wort anhören (gilt als nicht geschafft)</button>` : ""}
           </div>
         </div>
         <div id="typing-slot"></div>`
@@ -505,6 +505,12 @@ function runRound(main, config, onRestart) {
   }
 
   function typingMarkup() {
+    const help = state.current?.mode === "write" && state.current?.word?.audioUrl
+      ? `
+        <div class="typing-help tiny muted mt-1">
+          <button type="button" class="btn-link" data-action="play-word-help">${icon("speaker")} Wort anhören (gilt als nicht geschafft)</button>
+        </div>`
+      : "";
     return `
       <div class="typing-fallback">
         <h3>${icon("keyboard")} Antwort tippen</h3>
@@ -516,6 +522,7 @@ function runRound(main, config, onRestart) {
           <button class="btn btn-small" type="submit">${icon("check")} Prüfen</button>
         </form>
         <p class="tiny muted mb-0 mt-1">Groß- und Kleinschreibung ist egal.</p>
+        ${help}
       </div>`;
   }
 
@@ -823,6 +830,11 @@ function runRound(main, config, onRestart) {
         state.pad = null;
       }
     });
+    stage.querySelector('[data-action="play-word-help"]')?.addEventListener("click", () => {
+      if (state.answered || !state.current) return;
+      playWordAudio(state.current.word);
+      submitAnswer("", false, { source: "write-help", detected: "Wort angehört" });
+    });
 
     stage.querySelector('[data-action="speak-word"]')?.addEventListener("click", () => playWordAudio(word));
     stage.querySelector('[data-action="play-word-audio"]')?.addEventListener("click", () => playWordAudio(word));
@@ -857,6 +869,12 @@ function runRound(main, config, onRestart) {
     slot.dataset.visible = "true";
     slot.innerHTML = typingMarkup();
     slot.querySelector("form")?.addEventListener("submit", handleTypingSubmit);
+    slot.querySelector('[data-action="play-word-help"]')?.addEventListener("click", () => {
+      if (state.answered || !state.current) return;
+      playWordAudio(state.current.word);
+      // Anhören in der reinen Schreibaufgabe gilt als nicht geschafft.
+      submitAnswer("", false, { source: "write-help", detected: "Wort angehört" });
+    });
     const input = slot.querySelector("input");
     input?.focus({ preventScroll: true });
   }
@@ -1016,6 +1034,7 @@ function runRound(main, config, onRestart) {
         : false;
     const canAccept =
       !correct &&
+      meta.source !== "write-help" &&
       (meta.source === "speech" || meta.source === "typing" || meta.source === "handwriting" ||
         (machineRecognized && candidates.some((candidate) => isNearMiss(candidate, word))));
 
