@@ -431,16 +431,16 @@ export function getThemeStats(themeId, progressMap) {
   for (const word of words) {
     const progress = progressMap?.get?.(word.id);
     if (progress?.seen) started++;
-    const speakCorrect = progress?.speakCorrect || 0;
-    const writeCorrect = progress?.writeCorrect || 0;
-    const totalCorrect = progress?.correct || 0;
-    const meetsRule = totalCorrect >= 5 && speakCorrect >= 2 && writeCorrect >= 2;
+    const wordSpeakCorrect = progress?.speakCorrect || 0;
+    const wordWriteCorrect = progress?.writeCorrect || 0;
+    const wordTotalCorrect = progress?.correct || 0;
+    const meetsRule = wordTotalCorrect >= 5 && wordSpeakCorrect >= 2 && wordWriteCorrect >= 2;
     const legacyMastered = !progress?.speakSeen && !progress?.writeSeen && (progress?.box || 1) >= 5 && progress?.seen;
     if (meetsRule || legacyMastered) mastered++;
     speakSeen += progress?.speakSeen || 0;
-    speakCorrect += progress?.speakCorrect || 0;
+    speakCorrect += wordSpeakCorrect;
     writeSeen += progress?.writeSeen || 0;
-    writeCorrect += progress?.writeCorrect || 0;
+    writeCorrect += wordWriteCorrect;
   }
   return { total: words.length, mastered, started, speakSeen, speakCorrect, writeSeen, writeCorrect };
 }
