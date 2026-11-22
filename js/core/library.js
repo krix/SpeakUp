@@ -55,16 +55,7 @@ function makeWord(
 ) {
   const german = cleanText(de, 120);
   const english = cleanText(en, 120);
-  const src =
-    source && typeof source === "object"
-      ? {
-          bookId: cleanText(source.bookId, 120),
-          bookName: cleanText(source.bookName, 120),
-          chapter: cleanText(source.chapter, 120),
-          chapterName: cleanText(source.chapterName, 160),
-        }
-      : null;
-  const hasSource = src && (src.bookId || src.bookName || src.chapter || src.chapterName);
+  const src = cleanSource(source);
   return {
     id: makeWordId(themeId, german, english),
     themeId,
@@ -75,7 +66,7 @@ function makeWord(
     emoji: cleanText(emoji, 24),
     imageUrl: cleanUrl(imageUrl),
     audioUrl: cleanUrl(audioUrl),
-    source: hasSource ? src : null,
+    source: src,
     origin,
     edited: origin === "user",
     order: Number.isFinite(order) ? order : 0,
@@ -132,13 +123,7 @@ function normalizeStoredLibrary(raw) {
     word.imageUrl = cleanUrl(rawWord.imageUrl ?? rawWord.image_url ?? word.imageUrl);
     word.audioUrl = cleanUrl(rawWord.audioUrl ?? rawWord.audio_url ?? word.audioUrl);
     if (rawWord.source && typeof rawWord.source === "object") {
-      const src = {
-        bookId: cleanText(rawWord.source.bookId, 120),
-        bookName: cleanText(rawWord.source.bookName, 120),
-        chapter: cleanText(rawWord.source.chapter, 120),
-        chapterName: cleanText(rawWord.source.chapterName, 160),
-      };
-      word.source = src.bookId || src.bookName || src.chapter || src.chapterName ? src : null;
+      word.source = cleanSource(rawWord.source);
     }
     word.edited = Boolean(rawWord.edited);
     usedWordIds.add(word.id);
@@ -418,17 +403,25 @@ export function isThemeUnlocked(theme, points) {
   return Number(points) >= Number(theme.unlockPoints || 0);
 }
 
-/** Anzahl Wörter, gemeistert (Box 5) und angefangen. */
+/** Anzahl Wörter, gemeistert (Box 5), angefangen und Modus-Statistik. */
 export function getThemeStats(themeId, progressMap) {
   const words = getWords(themeId);
   let mastered = 0;
   let started = 0;
+  let speakSeen = 0;
+  let speakCorrect = 0;
+  let writeSeen = 0;
+  let writeCorrect = 0;
   for (const word of words) {
     const progress = progressMap?.get?.(word.id);
     if (progress?.seen) started++;
     if ((progress?.box || 1) >= 5 && progress?.seen) mastered++;
+    speakSeen += progress?.speakSeen || 0;
+    speakCorrect += progress?.speakCorrect || 0;
+    writeSeen += progress?.writeSeen || 0;
+    writeCorrect += progress?.writeCorrect || 0;
   }
-  return { total: words.length, mastered, started };
+  return { total: words.length, mastered, started, speakSeen, speakCorrect, writeSeen, writeCorrect };
 }
 
 function nextWordOrder(themeId) {
@@ -503,16 +496,7 @@ export async function updateWord(wordId, data, { keepProgress = true } = {}) {
   word.imageUrl = data.imageUrl === undefined ? word.imageUrl : cleanUrl(data.imageUrl);
   word.audioUrl = data.audioUrl === undefined ? word.audioUrl : cleanUrl(data.audioUrl);
   if (data.source !== undefined) {
-    const src = data.source && typeof data.source === "object" ? data.source : null;
-    const clean = src
-      ? {
-          bookId: cleanText(src.bookId, 120),
-          bookName: cleanText(src.bookName, 120),
-          chapter: cleanText(src.chapter, 120),
-          chapterName: cleanText(src.chapterName, 160),
-        }
-      : null;
-    word.source = clean && (clean.bookId || clean.bookName || clean.chapter || clean.chapterName) ? clean : null;
+    word.source = cleanSource(data.source);
   }
   word.themeId = targetThemeId;
   word.id = newId;
@@ -681,24 +665,17 @@ export async function applyImport({ themeId, newTheme = null, rows, mode = "add"
   if (newTheme) {
     const name = cleanText(newTheme.name, 60);
     if (!name) throw new Error("Bitte gib einen Namen f?r das neue Thema ein.");
-    const src =
-      newTheme.source && typeof newTheme.source === "object"
-        ? {
-            type: cleanText(newTheme.source.type, 40),
-            bookId: cleanText(newTheme.source.bookId, 120),
-            bookName: cleanText(newTheme.source.bookName, 120),
-          }
-        : null;
+    const src = cleanSource(newTheme.source);
     const theme = {
       id: newThemeId(name),
       name,
-      emoji: cleanText(newTheme.emoji, 16) || "??",
+      emoji: cleanText(newTheme.emoji, 16) || "📘",
       order: nextThemeOrder(),
       unlockPoints: Math.max(0, toInt(newTheme.unlockPoints, 0)),
       file: null,
       origin: "user",
       edited: true,
-      source: src && (src.type || src.bookId || src.bookName) ? src : null,
+      source: src,
     };
     library.themes.push(theme);
     targetThemeId = theme.id;
@@ -746,16 +723,7 @@ export async function applyImport({ themeId, newTheme = null, rows, mode = "add"
       if (row.imageUrl !== undefined) match.imageUrl = cleanUrl(row.imageUrl);
       if (row.audioUrl !== undefined) match.audioUrl = cleanUrl(row.audioUrl);
       if (row.source !== undefined) {
-        const src = row.source && typeof row.source === "object" ? row.source : null;
-        const clean = src
-          ? {
-              bookId: cleanText(src.bookId, 120),
-              bookName: cleanText(src.bookName, 120),
-              chapter: cleanText(src.chapter, 120),
-              chapterName: cleanText(src.chapterName, 160),
-            }
-          : null;
-        match.source = clean && (clean.bookId || clean.bookName || clean.chapter || clean.chapterName) ? clean : null;
+        match.source = cleanSource(row.source);
       }
       match.id = newId;
       match.edited = true;

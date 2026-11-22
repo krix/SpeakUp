@@ -135,6 +135,8 @@ export function parseVocabularyEntry(entry, bookId) {
     chapter: normalizeChapterId(asString(map.chapter)),
     chapterName: asString(map.chapter_name).trim(),
     section: asString(map.section).trim(),
+    page: asString(map.page).trim(),
+    task: asString(map.task).trim(),
   };
 }
 
@@ -179,7 +181,18 @@ export async function fetchBook(bookId, { signal } = {}) {
   };
 }
 
-/** Gruppiert Buch-Wörter nach Kapiteln für die Import-Vorschau. */
+function chapterPageLabel(words) {
+  const pages = [...new Set((words || []).map((w) => String(w.page || "").trim()).filter(Boolean))]
+    .map((p) => Number(p))
+    .filter((n) => Number.isFinite(n))
+    .sort((a, b) => a - b);
+  if (!pages.length) return "";
+  const first = pages[0];
+  const last = pages[pages.length - 1];
+  return first === last ? `S. ${first}` : `S. ${first}–${last}`;
+}
+
+/** Gruppiert Buch-Wörter nach Kapiteln für Import/Übersicht. */
 export function groupWordsByChapter(book) {
   const groups = new Map();
   for (const word of book.words || []) {
@@ -198,13 +211,21 @@ export function groupWordsByChapter(book) {
   for (const chapter of book.chapters || []) {
     const g = groups.get(chapter.id);
     if (g) {
-      g.name = chapter.name || g.name;
+      const baseName = chapter.name || g.name;
+      const pageLabel = chapterPageLabel(g.words);
+      g.name = pageLabel ? `${baseName} (${pageLabel})` : baseName;
+      g.chapterName = baseName;
       ordered.push(g);
       seen.add(chapter.id);
     }
   }
   for (const [id, g] of groups) {
-    if (!seen.has(id)) ordered.push(g);
+    if (!seen.has(id)) {
+      const pageLabel = chapterPageLabel(g.words);
+      g.chapterName = g.name;
+      g.name = pageLabel ? `${g.name} (${pageLabel})` : g.name;
+      ordered.push(g);
+    }
   }
   return ordered;
 }

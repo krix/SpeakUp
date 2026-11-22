@@ -1269,30 +1269,60 @@ export function renderParent(main) {
     panel.querySelector('[data-action="westermann-no-chapters"]')?.addEventListener("click", () => {
       state.import.westermann.selectedChapters = []; renderPanel();
     });
-    panel.querySelector('[data-action="westermann-apply"]')?.addEventListener("click", () => {
+    panel.querySelector('[data-action="westermann-apply"]')?.addEventListener("click", async () => {
       const w = state.import.westermann;
       if (!w.book) return;
       const selected = new Set(w.selectedChapters);
-      const rows = w.book.words.filter((word) => selected.has(word.chapter || "_other"));
+      const groups = westermann.groupWordsByChapter(w.book).filter((g) => selected.has(g.id));
+      const rows = groups.flatMap((g) => g.words);
       if (!rows.length) { w.error = "Bitte wähle mindestens ein Kapitel aus."; renderPanel(); return; }
-      state.import.fileName = w.book.name;
-      state.import.analysis = {
-        entries: rows.map((r, i) => ({
-          ...r, line: i + 1, id: null, errors: [], warnings: [], existsByGerman: false, duplicateInFile: false, selected: true,
-        })),
-        validEntries: rows,
-        globalErrors: [],
-        warnings: [`Quelle: Westermann „${w.book.name}“. Bilder und Audio werden als Links übernommen und bei Internetverbindung angezeigt.`],
-        delimiter: ";",
-        hasHeader: true,
-        themeId: state.import.target === "__new__" ? null : state.import.target,
-        existingCount: 0,
-        counts: { total: rows.length, valid: rows.length, errors: 0, newRows: rows.length, existingRows: 0, duplicateRows: 0 },
-      };
-      state.import.error = "";
-      state.import.target = "__new__";
-      state.import.newName = w.book.name;
-      renderPanel();
+
+      // Westermann-Import: pro Kapitel ein eigenes Thema anlegen (Kapitelname = Thema).
+      const button = panel.querySelector('[data-action="westermann-apply"]');
+      setButtonBusy(button, true, "Importiere …");
+      try {
+        const themeIds = [];
+        for (const group of groups) {
+          const result = await library.applyImport({
+            newTheme: {
+              name: group.name || w.book.name,
+              emoji: "📘",
+              source: {
+                type: "westermann-book",
+                bookId: w.book.id,
+                bookName: w.book.name,
+                chapter: group.id,
+                chapterName: group.chapterName || group.name,
+              },
+            },
+            rows: group.words.map((row) => ({
+              ...row,
+              source: {
+                type: "westermann-book",
+                bookId: w.book.id,
+                bookName: w.book.name,
+                chapter: group.id,
+                chapterName: group.chapterName || group.name,
+                section: row.section || "",
+                page: row.page || "",
+              },
+            })),
+            mode: "add",
+          });
+          themeIds.push(result.themeId);
+        }
+        bus.emit("words:change");
+        showToast(`${rows.length} Wörter in ${groups.length} ${groups.length === 1 ? "Thema" : "Themen"} importiert.`, { type: "success", iconName: "check" });
+        state.import = freshImportState(themeIds[0] || library.getThemes()[0]?.id);
+        state.tab = "words";
+        state.wordsThemeId = themeIds[0] || state.wordsThemeId;
+        renderPanel();
+      } catch (e) {
+        w.error = e.message || "Import fehlgeschlagen.";
+        renderPanel();
+      } finally {
+        setButtonBusy(button, false);
+      }
     });
 
     /* Foto */
@@ -1797,6 +1827,10 @@ export function renderParent(main) {
           box: record?.box || 1,
           accuracy: record?.seen ? record.correct / record.seen : -1,
           lastSeen: record?.lastSeen || 0,
+          speakSeen: record?.speakSeen || 0,
+          speakCorrect: record?.speakCorrect || 0,
+          writeSeen: record?.writeSeen || 0,
+          writeCorrect: record?.writeCorrect || 0,
         };
       })
       .filter((row) => {
@@ -1834,8 +1868,8 @@ export function renderParent(main) {
           <div class="stat-grid">
             <div class="stat-card"><span class="stat-icon">${icon("chart")}</span><strong>${started}</strong><span>Wörter angefangen</span></div>
             <div class="stat-card"><span class="stat-icon">${icon("star")}</span><strong>${mastered}</strong><span>in Box 5</span></div>
-            <div class="stat-card"><span class="stat-icon">${icon("check")}</span><strong>${profile.totalCorrect}</strong><span>richtige Antworten</span></div>
-            <div class="stat-card"><span class="stat-icon">${icon("refresh")}</span><strong>${profile.sessions}</strong><span>Runden</span></div>
+            <div class="stat-card"><span class="stat-icon">${icon("mic")}</span><strong>${profile.speakCorrect || 0}</strong><span>richtig gesprochen</span></div>
+            <div class="stat-card"><span class="stat-icon">${icon("pencil")}</span><strong>${profile.writeCorrect || 0}</strong><span>richtig geschrieben</span></div>
           </div>
 
           <div class="toolbar mt-3">
@@ -1859,8 +1893,7 @@ export function renderParent(main) {
                   <table class="data">
                     <thead><tr>
                       <th scope="col">Wort</th><th scope="col">Thema</th><th scope="col">Box</th>
-                      <th scope="col">Gesehen</th><th scope="col">Richtig</th><th scope="col">Fehler</th>
-                      <th scope="col">Quote</th><th scope="col">Zuletzt</th><th scope="col">Aktion</th>
+                      <th scope="col">Sprechen</th><th scope="col">Schreiben</th><th scope="col">Quote</th><th scope="col">Zuletzt</th><th scope="col">Aktion</th>
                     </tr></thead>
                     <tbody>
                       ${rows
@@ -1871,9 +1904,8 @@ export function renderParent(main) {
                             <td><strong>${esc(row.word.de)}</strong><div class="tiny muted">${esc(row.word.en)}</div></td>
                             <td class="tiny">${esc(row.theme?.emoji || "")} ${esc(row.theme?.name || "–")}</td>
                             <td><span class="preview-stat">${row.seen ? row.box : "neu"}</span></td>
-                            <td>${row.seen}</td>
-                            <td>${row.correct}</td>
-                            <td>${row.wrong}</td>
+                            <td class="tiny">${row.speakCorrect}/${row.speakSeen}</td>
+                            <td class="tiny">${row.writeCorrect}/${row.writeSeen}</td>
                             <td class="bold">${accuracy}</td>
                             <td class="tiny muted">${row.lastSeen ? esc(formatDate(row.lastSeen)) : "–"}</td>
                             <td class="actions">

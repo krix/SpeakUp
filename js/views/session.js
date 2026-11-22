@@ -57,17 +57,15 @@ const MIX_CYCLE = ["speak", "listen", "write"];
 /** Sichtbare Lücke für das gesuchte Wort – enthält nie die Lösung. */
 const WORD_GAP = `<span class="word-gap" aria-label="Lücke">_____</span>`;
 
-/** Normalisiert Beispielsätze: Westermann-Markierungen _wort_ werden zu "wort". */
+/** Normalisiert Beispielsätze: Westermann-Markierungen _wort_ bleiben als Marker erhalten. */
 function normalizeExampleText(value) {
-  return String(value ?? "")
-    .replace(/_([^_]+)_/g, '"$1"')
-    .replace(/\s+/g, " ")
-    .trim();
+  return String(value ?? "").replace(/\s+/g, " ").trim();
 }
 
 /** Text für Sprachausgabe: Marker/Anführungszeichen entfernen. */
 function exampleSpeechText(value) {
   return normalizeExampleText(value)
+    .replace(/_([^_]+)_/g, "$1")
     .replace(/[„“”"']/g, "")
     .replace(/\s+/g, " ")
     .trim();
@@ -94,6 +92,30 @@ function buildAnswerPattern(word) {
   return new RegExp(`(^|[^\\p{L}\\p{N}])(${terms.join("|")})(?=$|[^\\p{L}\\p{N}])`, "giu");
 }
 
+function renderMarkedExample(example) {
+  let html = "";
+  let cursor = 0;
+  const pattern = /_([^_]+)_|(^|[^\p{L}\p{N}])(["“„'])([^\n"'“”„]+?)(["”"'])(?=$|[^\p{L}\p{N}])/giu;
+  for (const match of example.matchAll(pattern)) {
+    const full = match[0];
+    const idx = match.index ?? 0;
+    if (match[1] !== undefined) {
+      html += esc(example.slice(cursor, idx));
+      html += `<strong class="example-focus">${esc(match[1])}</strong>`;
+      cursor = idx + full.length;
+      continue;
+    }
+    const prefix = match[2] || "";
+    const word = match[4] || "";
+    html += esc(example.slice(cursor, idx));
+    html += esc(prefix);
+    html += `<strong class="example-focus">${esc(word)}</strong>`;
+    cursor = idx + full.length;
+  }
+  html += esc(example.slice(cursor));
+  return html;
+}
+
 /**
  * Baut aus dem Beispielsatz eine Lückenvariante.
  * Markierte Wörter in Anführungszeichen/Unterstrichen und die gesuchte Antwort
@@ -104,15 +126,15 @@ function maskExampleWord(word) {
   if (!example) return "";
 
   const answerPattern = buildAnswerPattern(word);
-  // Markierte Zielwörter: "word", „word“, 'word' – werden vor Auflösung verborgen.
-  const quotedPattern = /(^|[^\p{L}\p{N}])(["“„'])([^\n"'“”„]+?)(["”"'])(?=$|[^\p{L}\p{N}])/giu;
+  const quotedPattern = /_([^_]+)_|(^|[^\p{L}\p{N}])(["“„'])([^\n"'“”„]+?)(["”"'])(?=$|[^\p{L}\p{N}])/giu;
 
   let html = "";
   let cursor = 0;
   const matches = [];
 
   for (const match of example.matchAll(quotedPattern)) {
-    matches.push({ index: match.index, length: match[0].length, prefix: match[1] || "" });
+    const prefix = match[1] !== undefined ? "" : (match[2] || "");
+    matches.push({ index: match.index, length: match[0].length, prefix });
   }
   if (answerPattern) {
     for (const match of example.matchAll(answerPattern)) {
@@ -138,7 +160,7 @@ function maskExampleWord(word) {
 function renderExample(word, { masked = true, mode = "", allowSpeak = false } = {}) {
   const raw = normalizeExampleText(word?.example);
   if (!raw) return "";
-  const content = masked ? maskExampleWord(word) : esc(raw);
+  const content = masked ? maskExampleWord(word) : renderMarkedExample(raw);
   const canSpeak = allowSpeak && mode === "write";
   return `
     <p class="example-sentence">
@@ -904,7 +926,7 @@ function runRound(main, config, onRestart) {
         gained = POINTS_RETRY;
       }
       state.points += gained;
-      recordPromise = learner.recordAttempt(word.id, true, { promote }).catch((error) => {
+      recordPromise = learner.recordAttempt(word.id, true, { promote, mode: current.mode }).catch((error) => {
         console.error("[session] Fortschritt konnte nicht gespeichert werden", error);
       });
       sfx.correct();
@@ -914,7 +936,7 @@ function runRound(main, config, onRestart) {
     } else {
       state.streak = 0;
       state.wrongByWord.set(word.id, (state.wrongByWord.get(word.id) || 0) + 1);
-      recordPromise = learner.recordAttempt(word.id, false, { promote: false }).catch((error) => {
+      recordPromise = learner.recordAttempt(word.id, false, { promote: false, mode: current.mode }).catch((error) => {
         console.error("[session] Fortschritt konnte nicht gespeichert werden", error);
       });
       sfx.wrong();
@@ -1048,7 +1070,7 @@ function runRound(main, config, onRestart) {
       // lokalen Datenbank eindeutig bleibt.
       await attempt.recordPromise;
       await learner.restoreProgress(attempt.word.id, attempt.previousProgress);
-      await learner.recordAttempt(attempt.word.id, true, { promote: attempt.firstAttempt });
+      await learner.recordAttempt(attempt.word.id, true, { promote: attempt.firstAttempt, mode: attempt.mode });
     } catch (error) {
       console.error("[session] Nachträgliche Wertung fehlgeschlagen", error);
       showToast("Das konnte gerade nicht gespeichert werden. Versuch es noch einmal.", {
@@ -1163,7 +1185,7 @@ function runRound(main, config, onRestart) {
           <span class="small muted">${esc(word.de)}</span><br>
           <strong>${esc(word.en)}</strong>
           ${alternativesLine}
-          ${word.example ? `<p class="mb-0 mt-2 example-feedback"><button type="button" class="btn-link" data-action="speak-example">${icon("speaker")}</button> <em>${esc(normalizeExampleText(word.example))}</em></p>` : ""}
+          ${word.example ? `<p class="mb-0 mt-2 example-feedback"><button type="button" class="btn-link" data-action="speak-example">${icon("speaker")}</button> <em>${renderMarkedExample(normalizeExampleText(word.example))}</em></p>` : ""}
         </div>
       </div>
       ${detected ? `<p class="detected">Erkannt: „${esc(detected)}“</p>` : ""}

@@ -47,13 +47,20 @@ export function renderProgress(main) {
   const accuracy =
     profile.totalAnswered > 0 ? Math.round((profile.totalCorrect / profile.totalAnswered) * 100) : null;
 
+  const speakSeen = [...progress.values()].reduce((sum, r) => sum + (r.speakSeen || 0), 0);
+  const speakCorrect = [...progress.values()].reduce((sum, r) => sum + (r.speakCorrect || 0), 0);
+  const writeSeen = [...progress.values()].reduce((sum, r) => sum + (r.writeSeen || 0), 0);
+  const writeCorrect = [...progress.values()].reduce((sum, r) => sum + (r.writeCorrect || 0), 0);
+  const speakAcc = speakSeen ? Math.round((speakCorrect / speakSeen) * 100) : null;
+  const writeAcc = writeSeen ? Math.round((writeCorrect / writeSeen) * 100) : null;
+
   const statCards = [
     { iconName: "star", value: profile.points, label: "Punkte gesammelt" },
     { iconName: "check", value: `${mastered} / ${allWords.length}`, label: "Wörter gemeistert" },
     { iconName: "chart", value: started, label: "Wörter angefangen" },
+    { iconName: "mic", value: speakAcc === null ? "–" : `${speakAcc} %`, label: `Sprechen (${speakCorrect}/${speakSeen})` },
+    { iconName: "pencil", value: writeAcc === null ? "–" : `${writeAcc} %`, label: `Schreiben (${writeCorrect}/${writeSeen})` },
     { iconName: "flame", value: `${streak} ${streak === 1 ? "Tag" : "Tage"}`, label: "Aktuelle Serie" },
-    { iconName: "refresh", value: profile.sessions, label: "Runden gespielt" },
-    { iconName: "check", value: accuracy === null ? "–" : `${accuracy} %`, label: "Trefferquote" },
   ];
 
   const themeRows = themes
@@ -61,6 +68,8 @@ export function renderProgress(main) {
       const stats = library.getThemeStats(theme.id, progress);
       const percent = stats.total ? Math.round((stats.mastered / stats.total) * 100) : 0;
       const isLocked = !library.isThemeUnlocked(theme, profile.points);
+      const speakPct = stats.speakSeen ? Math.round((stats.speakCorrect / stats.speakSeen) * 100) : null;
+      const writePct = stats.writeSeen ? Math.round((stats.writeCorrect / stats.writeSeen) * 100) : null;
       return `
         <div class="theme-progress-row">
           <span class="emoji" aria-hidden="true">${esc(theme.emoji)}</span>
@@ -71,6 +80,9 @@ export function renderProgress(main) {
             </div>
             <div class="progress-track" role="progressbar" aria-valuenow="${percent}" aria-valuemin="0" aria-valuemax="100" aria-label="Gemeistert in ${esc(theme.name)}">
               <div class="progress-fill ${percent >= 100 ? "green" : ""}" style="width:${percent}%"></div>
+            </div>
+            <div class="tiny muted" style="margin-top:4px">
+              ${stats.started}/${stats.total} angefangen · ${speakPct === null ? "Sprechen –" : `Sprechen ${speakPct}%`} · ${writePct === null ? "Schreiben –" : `Schreiben ${writePct}%`}
             </div>
           </div>
           <div class="row" style="gap:4px">

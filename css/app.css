@@ -499,6 +499,7 @@ main:focus { outline: none; }
 .example-speak-btn { width: 34px; height: 34px; min-width: 34px; min-height: 34px; padding: 0; margin: -4px 2px -4px -4px; vertical-align: middle; }
 .example-speak-btn .icon { margin-right: 0; vertical-align: middle; }
 .example-feedback .btn-link { padding: 0 2px; min-height: 0; vertical-align: middle; }
+.example-focus { font-weight: 800; color: var(--c-ink); font-style: normal; }
 .example-label { font-style: normal; color: var(--c-muted); }
 .word-gap {
   display: inline-block;

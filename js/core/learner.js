@@ -159,6 +159,11 @@ function normalizeProgress(raw) {
     lastCorrectAt: Number(raw.lastCorrectAt) || 0,
     dueAt: Number(raw.dueAt) || 0,
     masteredAt: Number(raw.masteredAt) || 0,
+    // Getrennte Statistik nach Übungsart (Sprechen / Schreiben+Hören).
+    speakSeen: Math.max(0, Number(raw.speakSeen) || 0),
+    speakCorrect: Math.max(0, Number(raw.speakCorrect) || 0),
+    writeSeen: Math.max(0, Number(raw.writeSeen) || 0),
+    writeCorrect: Math.max(0, Number(raw.writeCorrect) || 0),
   };
 }
 
@@ -318,7 +323,7 @@ export function selectSessionWords(words, count = 10) {
 }
 
 /** Eine Antwort innerhalb einer Runde speichern (sofort persistiert). */
-export async function recordAttempt(wordId, correct, { promote = true } = {}) {
+export async function recordAttempt(wordId, correct, { promote = true, mode = null } = {}) {
   const now = Date.now();
   const record = progress.get(wordId) || {
     id: wordId,
@@ -331,10 +336,22 @@ export async function recordAttempt(wordId, correct, { promote = true } = {}) {
     lastCorrectAt: 0,
     dueAt: 0,
     masteredAt: 0,
+    speakSeen: 0,
+    speakCorrect: 0,
+    writeSeen: 0,
+    writeCorrect: 0,
   };
 
   record.seen += 1;
   record.lastSeen = now;
+  // Modus-Statistik: "listen" zählt als Schreiben.
+  if (mode === "speak") {
+    record.speakSeen = (record.speakSeen || 0) + 1;
+    if (correct) record.speakCorrect = (record.speakCorrect || 0) + 1;
+  } else if (mode === "write" || mode === "listen") {
+    record.writeSeen = (record.writeSeen || 0) + 1;
+    if (correct) record.writeCorrect = (record.writeCorrect || 0) + 1;
+  }
 
   if (correct) {
     record.correct += 1;
