@@ -57,59 +57,96 @@ const MIX_CYCLE = ["speak", "listen", "write"];
 /** Sichtbare Lücke für das gesuchte Wort – enthält nie die Lösung. */
 const WORD_GAP = `<span class="word-gap" aria-label="Lücke">_____</span>`;
 
-/**
- * Baut aus dem gespeicherten Beispielsatz eine Lückenvariante.
- * Die gesuchte Antwort und alle akzeptierten Alternativen werden maskiert,
- * damit der Satz zwar Kontext gibt, die Lösung aber nicht ablesbar ist.
- * Einfache Flexionen (dog → dogs, paint → painting) werden mit abgedeckt.
- */
-function maskExampleWord(word) {
-  const example = String(word?.example || "").trim();
-  if (!example) return "";
+/** Normalisiert Beispielsätze: Westermann-Markierungen _wort_ werden zu "wort". */
+function normalizeExampleText(value) {
+  return String(value ?? "")
+    .replace(/_([^_]+)_/g, '"$1"')
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
-  const terms = [word.en, ...(word.alternatives || [])]
+/** Text für Sprachausgabe: Marker/Anführungszeichen entfernen. */
+function exampleSpeechText(value) {
+  return normalizeExampleText(value)
+    .replace(/[„“”"']/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function exampleAnswerTerms(word) {
+  return [word?.en, ...(word?.alternatives || [])]
     .flatMap((value) => {
       const term = String(value ?? "").replace(/\s+/g, " ").trim();
       if (!term) return [];
-      // „to swim“ soll auch ein einfaches „swim“ im Satz verdecken.
       const bare = term.replace(/^to\s+/i, "").trim();
       return bare && bare !== term ? [term, bare] : [term];
     })
     .map((term) => term.toLocaleLowerCase("en"))
     .filter(Boolean)
     .sort((a, b) => b.length - a.length);
+}
 
-  if (!terms.length) return esc(example);
-
-  const escaped = [...new Set(terms)]
+function buildAnswerPattern(word) {
+  const terms = [...new Set(exampleAnswerTerms(word))]
     .map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+"))
-    .map((term) => `${term}(?:s|es|ed|ing)?`)
-    .join("|");
+    .map((term) => `${term}(?:['’]s|s|es|ed|ing)?`);
+  if (!terms.length) return null;
+  return new RegExp(`(^|[^\\p{L}\\p{N}])(${terms.join("|")})(?=$|[^\\p{L}\\p{N}])`, "giu");
+}
 
-  // Der Rand darf kein Buchstabe/Zahl sein – „car“ trifft also nicht „carpet“.
-  const pattern = new RegExp(`(^|[^\\p{L}\\p{N}])(${escaped})(?=$|[^\\p{L}\\p{N}])`, "giu");
+/**
+ * Baut aus dem Beispielsatz eine Lückenvariante.
+ * Markierte Wörter in Anführungszeichen/Unterstrichen und die gesuchte Antwort
+ * werden maskiert, damit der Satz Kontext gibt, die Lösung aber nicht verrät.
+ */
+function maskExampleWord(word) {
+  const example = normalizeExampleText(word?.example);
+  if (!example) return "";
+
+  const answerPattern = buildAnswerPattern(word);
+  // Markierte Zielwörter: "word", „word“, 'word' – werden vor Auflösung verborgen.
+  const quotedPattern = /(^|[^\p{L}\p{N}])(["“„'])([^\n"'“”„]+?)(["”"'])(?=$|[^\p{L}\p{N}])/giu;
 
   let html = "";
   let cursor = 0;
-  for (const match of example.matchAll(pattern)) {
-    html += esc(example.slice(cursor, match.index));
-    html += esc(match[1] || ""); // Trennzeichen vor der Lücke bleibt erhalten.
+  const matches = [];
+
+  for (const match of example.matchAll(quotedPattern)) {
+    matches.push({ index: match.index, length: match[0].length, prefix: match[1] || "" });
+  }
+  if (answerPattern) {
+    for (const match of example.matchAll(answerPattern)) {
+      matches.push({ index: match.index, length: match[0].length, prefix: match[1] || "" });
+    }
+  }
+  matches.sort((a, b) => a.index - b.index || b.length - a.length);
+
+  let lastEnd = 0;
+  for (const m of matches) {
+    if (m.index < lastEnd) continue;
+    html += esc(example.slice(cursor, m.index));
+    html += esc(m.prefix);
     html += WORD_GAP;
-    cursor = match.index + match[0].length;
+    cursor = m.index + m.length;
+    lastEnd = cursor;
   }
   html += esc(example.slice(cursor));
   return html;
 }
 
-/** Beispielsatz mit Lücke für die Fragekarte. */
-function renderExample(word) {
-  const masked = maskExampleWord(word);
-  if (!masked) return "";
+/** Beispielsatz für Frage/Feedback. Im Schreibmodus optional vorlesbar. */
+function renderExample(word, { masked = true, mode = "", allowSpeak = false } = {}) {
+  const raw = normalizeExampleText(word?.example);
+  if (!raw) return "";
+  const content = masked ? maskExampleWord(word) : esc(raw);
+  const canSpeak = allowSpeak && mode === "write";
   return `
     <p class="example-sentence">
-      ${icon("speaker")}
+      ${canSpeak
+        ? `<button type="button" class="icon-btn example-speak-btn" data-action="speak-example" aria-label="Beispielsatz anhören">${icon("speaker")}</button>`
+        : icon("speaker")}
       <span class="example-label">Beispiel:</span>
-      <em>${masked}</em>
+      <em>${content}</em>
     </p>`;
 }
 
@@ -304,6 +341,9 @@ function runRound(main, config, onRestart) {
     stage.querySelectorAll('[data-action="play-word-audio"]').forEach((btn) => {
       btn.addEventListener("click", () => playWordAudio(word));
     });
+    stage.querySelectorAll('[data-action="speak-example"]').forEach((btn) => {
+      btn.addEventListener("click", () => speakWord(exampleSpeechText(word.example)));
+    });
 
     updateProgress();
 
@@ -324,7 +364,7 @@ function runRound(main, config, onRestart) {
     const info = MODE_INFO[mode] || MODE_INFO.write;
     const emoji = word.emoji || "💬";
     const badge = `<span class="mode-badge">${icon(info.iconName)} ${esc(info.label)}</span>`;
-    const example = renderExample(word);
+    const example = renderExample(word, { masked: true, mode, allowSpeak: mode === "write" });
 
     if (mode === "speak") {
       const usingGeminiSpeech = (learner.getSettings().speechProvider || "browser") === "gemini";
@@ -1123,7 +1163,7 @@ function runRound(main, config, onRestart) {
           <span class="small muted">${esc(word.de)}</span><br>
           <strong>${esc(word.en)}</strong>
           ${alternativesLine}
-          ${word.example ? `<p class="mb-0 mt-2">${icon("speaker")} <em>${esc(word.example)}</em></p>` : ""}
+          ${word.example ? `<p class="mb-0 mt-2 example-feedback"><button type="button" class="btn-link" data-action="speak-example">${icon("speaker")}</button> <em>${esc(normalizeExampleText(word.example))}</em></p>` : ""}
         </div>
       </div>
       ${detected ? `<p class="detected">Erkannt: „${esc(detected)}“</p>` : ""}
@@ -1143,6 +1183,9 @@ function runRound(main, config, onRestart) {
 
     stage.append(card);
     card.querySelector('[data-action="speak-word"]')?.addEventListener("click", () => playWordAudio(word));
+    card.querySelectorAll('[data-action="speak-example"]').forEach((btn) => {
+      btn.addEventListener("click", () => speakWord(exampleSpeechText(word.example)));
+    });
     card.querySelector('[data-action="play-word-audio"]')?.addEventListener("click", () => playWordAudio(word));
     card.querySelector('[data-action="accept-correct"]')?.addEventListener("click", () => {
       acceptAnswer(acceptance, card);
