@@ -18,11 +18,11 @@ const MODES = [
 
 const THEME_TINTS = ["#EEE9FF", "#E3F1FF", "#FFE8E0", "#FFF3CF", "#DFF8F5", "#FFE5F2", "#E0F6E9"];
 
-function greeting() {
+function greeting(name = "") {
   const hour = new Date().getHours();
-  if (hour < 11) return "Guten Morgen";
-  if (hour < 18) return "Hallo";
-  return "Guten Abend";
+  const base = hour < 11 ? "Guten Morgen" : hour < 18 ? "Hallo" : "Guten Abend";
+  const clean = String(name || "").trim();
+  return clean ? `${base} ${clean}` : base;
 }
 
 function modeLine(mode) {
@@ -119,7 +119,7 @@ export function renderHome(main) {
     <div class="home">
       <section class="home-hero" aria-labelledby="hero-title">
         <div class="hero-copy">
-          <span class="hero-kicker">${icon("star")} ${greeting()}</span>
+          <span class="hero-kicker">${icon("star")} ${esc(greeting(profile.name))}</span>
           <h1 class="hero-title" id="hero-title">Bereit für Englisch?</h1>
           <p class="hero-text" id="hero-line">${esc(modeLine(mode))}</p>
           <div class="hero-stats">
