@@ -999,9 +999,9 @@ function runRound(main, config, onRestart) {
       confetti({ count: 60, originY: 0.35 });
     }
 
-    // Nachträgliche "dennoch richtig"-Wertung: bei Sprechübungen immer anbieten
-    // (Erkennung ist bei kurzen Wörtern oft unzuverlässig), bei Handschrift nur
-    // bei plausiblen Nahe-Treffern. Beim Tippen entscheidet das Kind selbst.
+    // Nachträgliche "dennoch richtig"-Wertung: bei Sprechen/Schreiben/Handschrift
+    // immer anbieten (Erkennung/Tippfehler möglich). Beim reinen Tippen kann das
+    // Kind so z. B. ein versehentlich falsch gewertetes Wort korrigieren.
     const machineRecognized = meta.source === "speech" || meta.source === "handwriting";
     const candidates = [input, ...(meta.candidates || [])].filter(
       (value) => typeof value === "string" && value.trim()
@@ -1014,7 +1014,7 @@ function runRound(main, config, onRestart) {
         : false;
     const canAccept =
       !correct &&
-      (meta.source === "speech" ||
+      (meta.source === "speech" || meta.source === "typing" || meta.source === "handwriting" ||
         (machineRecognized && candidates.some((candidate) => isNearMiss(candidate, word))));
 
     const acceptance = canAccept
@@ -1200,7 +1200,7 @@ function runRound(main, config, onRestart) {
     const acceptanceBlock = acceptance
       ? `
         <div class="feedback-accept">
-          <p class="small mb-1">${mode === "speak" ? "Die Erkennung hat manchmal Probleme - warst du richtig?" : "Die Erkennung lag vielleicht daneben. War deine Antwort richtig?"}</p>
+          <p class="small mb-1">${mode === "speak" ? "Die Erkennung hat manchmal Probleme - warst du richtig?" : mode === "write" ? "War deine Antwort eigentlich richtig?" : "Die Erkennung lag vielleicht daneben. War deine Antwort richtig?"}</p>
           <button type="button" class="btn btn-soft btn-small" data-action="accept-correct">
             ${icon("check")} Dennoch als richtig werten
           </button>
@@ -1258,8 +1258,15 @@ function runRound(main, config, onRestart) {
       </div>`;
 
     stage.append(card);
+    const replayWordAndExample = () => {
+      const ex = exampleSpeechText(word.example);
+      playWordAudio(word, {
+        fallbackTts: true,
+        onEnd: () => { if (ex) speakWord(ex); },
+      });
+    };
     card.querySelectorAll('[data-action="speak-word"]').forEach((btn) => {
-      btn.addEventListener("click", () => playWordAudio(word));
+      btn.addEventListener("click", replayWordAndExample);
     });
     card.querySelectorAll('[data-action="speak-example"]').forEach((btn) => {
       btn.addEventListener("click", () => speakWord(exampleSpeechText(word.example)));
@@ -1272,7 +1279,7 @@ function runRound(main, config, onRestart) {
         if (exampleText) speakWord(exampleText);
       },
     });
-    card.querySelector('[data-action="play-word-audio"]')?.addEventListener("click", () => playWordAudio(word));
+    card.querySelector('[data-action="play-word-audio"]')?.addEventListener("click", replayWordAndExample);
     card.querySelector('[data-action="accept-correct"]')?.addEventListener("click", () => {
       acceptAnswer(acceptance, card);
     });

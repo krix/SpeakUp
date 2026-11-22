@@ -382,7 +382,7 @@ export function renderParent(main) {
                           <td>${sanitizeRichText(word.en)}</td>
                           <td class="tiny">
                             ${word.alternatives?.length ? `<div>${word.alternatives.map((alt) => sanitizeRichText(alt)).join(", ")}</div>` : `<span class="muted">–</span>`}
-                            ${word.example ? `<div class="muted">„${esc(word.example)}“</div>` : ""}
+                            ${word.example ? `<div class="muted">„${sanitizeRichText(word.example)}“</div>` : ""}
                           </td>
                           <td><span class="preview-stat" title="Leitner-Box">${record?.seen ? record.box : "neu"}</span></td>
                           <td class="actions">
