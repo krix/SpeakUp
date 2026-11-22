@@ -146,6 +146,7 @@ export function createSpeechRecognizer({
   lang = "en-US",
   onInterim = null,
   onStart = null,
+  onSpeechStart = null,
   timeoutMs = 12000,
   startTimeoutMs = 15000,
   stream = null,
@@ -222,6 +223,22 @@ export function createSpeechRecognizer({
     if (typeof onStart === "function") onStart();
   };
 
+  recognition.onspeechstart = () => {
+    if (settled) return;
+    armResultTimer();
+    if (typeof onSpeechStart === "function") onSpeechStart();
+  };
+
+  recognition.onaudiostart = () => {
+    if (settled) return;
+    console.log("[speech] audiostart");
+    armResultTimer();
+  };
+
+  recognition.onaudioend = () => {
+    console.log("[speech] audioend", { lastInterim, settled });
+  };
+
   recognition.onresult = (event) => {
     const result = event.results?.[event.results.length - 1];
     if (!result) return;
@@ -232,6 +249,7 @@ export function createSpeechRecognizer({
         if (text) alternatives.push(text);
       }
       const transcript = alternatives[0] || lastInterim || "";
+      console.log("[speech] final", { transcript, alternatives });
       finish(resolveFn, {
         transcript,
         alternatives: [...new Set([transcript, ...alternatives].filter(Boolean))],
@@ -240,10 +258,36 @@ export function createSpeechRecognizer({
     } else {
       lastInterim = result[0]?.transcript?.trim() || lastInterim;
       if (lastInterim && typeof onInterim === "function") onInterim(lastInterim);
+      // Bei Interims Ergebnis Timeout erneuern, damit aktive Sprache nicht abläuft.
+      armResultTimer();
     }
   };
 
+  recognition.onnomatch = () => {
+    console.log("[speech] nomatch", { lastInterim });
+  };
+
+  recognition.onsoundstart = () => {
+    if (!settled) armResultTimer();
+  };
+
+  recognition.onspeechend = () => {
+    // Manche Browser liefern nach Sprachende kein zuverlässiges onend.
+    // Nur stoppen, wenn wir bereits Text haben - sonst evtl. zu früh.
+    if (settled) return;
+    console.log("[speech] speechend", { lastInterim });
+    setTimeout(() => {
+      if (settled) return;
+      try {
+        recognition.stop();
+      } catch {
+        /* ignorieren */
+      }
+    }, lastInterim ? 900 : 1800);
+  };
+
   recognition.onerror = (event) => {
+    console.warn("[speech] error", event.error);
     if (event.error === "aborted") {
       finish(rejectFn, new SpeechError("aborted"));
       return;
@@ -253,6 +297,7 @@ export function createSpeechRecognizer({
 
   recognition.onend = () => {
     if (settled) return;
+    console.log("[speech] end", { started, lastInterim });
     if (!started) {
       finish(rejectFn, new SpeechError("start-failed"));
     } else if (lastInterim) {

@@ -219,12 +219,13 @@ export function checkAnswer(input, word) {
       if (inputVariants.has(variant)) return { correct: true, matched: answer, normalized: normalizedInput };
     }
     // Ganze Wörter in einem Satz, z. B. "It's a dog!" → "dog"
+    // Auch kurze einsilbige Wörter akzeptieren (dog, cat, red, ...).
     const searchVariants = [normalizedAnswer, withoutFillers(normalizedAnswer)].filter(Boolean);
     for (const target of searchVariants) {
-      if (target.length >= 3 && inputVariants.has(target)) {
+      if (target.length >= 2 && inputVariants.has(target)) {
         return { correct: true, matched: answer, normalized: normalizedInput };
       }
-      if (target.length >= 4 && ` ${normalizedInput} `.includes(` ${target} `)) {
+      if (target.length >= 2 && ` ${normalizedInput} `.includes(` ${target} `)) {
         return { correct: true, matched: answer, normalized: normalizedInput };
       }
     }

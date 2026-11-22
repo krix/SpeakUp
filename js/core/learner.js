@@ -234,6 +234,15 @@ export function getProgressMap() {
   return progress;
 }
 
+export function isMastered(record) {
+  if (!record) return false;
+  const speakOk = (record.speakCorrect || 0) >= 3;
+  const writeOk = (record.writeCorrect || 0) >= 3;
+  // Rückwärtskompatibel: alte Box-5-Daten ohne Modusstatistik zählen weiter.
+  const legacy = !record.speakSeen && !record.writeSeen && record.box >= 5 && record.seen > 0;
+  return (speakOk && writeOk) || legacy;
+}
+
 export function getProgress(wordId) {
   return progress.get(wordId) || null;
 }
@@ -360,7 +369,7 @@ export async function recordAttempt(wordId, correct, { promote = true, mode = nu
     if (promote) {
       record.box = clamp(record.box + 1, 1, 5);
     }
-    if (record.box >= 5) {
+    if (isMastered(record)) {
       record.masteredAt = record.masteredAt || now;
     }
     const days = LEITNER_INTERVALS[record.box] ?? 1;
@@ -503,7 +512,7 @@ export const BADGES = [
     icon: "🏅",
     title: "Merker-Meister",
     description: "5 Wörter in Box 5 gemeistert.",
-    test: ({ progress: map }) => [...map.values()].filter((record) => record.seen && record.box >= 5).length >= 5,
+    test: ({ progress: map }) => [...map.values()].filter((record) => isMastered(record)).length >= 5,
   },
   {
     id: "wortschatz-50",

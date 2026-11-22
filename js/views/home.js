@@ -43,7 +43,7 @@ export function renderHome(main) {
   const nextLocked = themes
     .filter((theme) => !library.isThemeUnlocked(theme, profile.points))
     .sort((a, b) => a.unlockPoints - b.unlockPoints)[0];
-  const masteredTotal = [...progress.values()].filter((record) => record.seen && record.box >= 5).length;
+  const masteredTotal = [...progress.values()].filter((record) => learner.isMastered(record)).length;
 
   const modeCards = MODES.map(
     (item) => `

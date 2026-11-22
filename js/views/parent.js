@@ -1889,7 +1889,7 @@ export function renderParent(main) {
     rows.sort(sorters[state.statsSort] || sorters.wrong);
 
     const started = rows.filter((row) => row.seen > 0).length;
-    const mastered = [...progress.values()].filter((record) => record.seen && record.box >= 5).length;
+    const mastered = [...progress.values()].filter((record) => learner.isMastered(record)).length;
     const seenTotal = Object.values(boxes).reduce((sum, value) => sum + value, 0);
 
     panel.innerHTML = `
@@ -1905,7 +1905,7 @@ export function renderParent(main) {
 
           <div class="stat-grid">
             <div class="stat-card"><span class="stat-icon">${icon("chart")}</span><strong>${started}</strong><span>Wörter angefangen</span></div>
-            <div class="stat-card"><span class="stat-icon">${icon("star")}</span><strong>${mastered}</strong><span>in Box 5</span></div>
+            <div class="stat-card"><span class="stat-icon">${icon("star")}</span><strong>${mastered}</strong><span>gemeistert</span></div>
             <div class="stat-card"><span class="stat-icon">${icon("mic")}</span><strong>${profile.speakCorrect || 0}</strong><span>richtig gesprochen</span></div>
             <div class="stat-card"><span class="stat-icon">${icon("pencil")}</span><strong>${profile.writeCorrect || 0}</strong><span>richtig geschrieben</span></div>
           </div>

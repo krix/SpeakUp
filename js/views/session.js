@@ -560,7 +560,14 @@ function runRound(main, config, onRestart) {
       }
       heard?.classList.toggle("is-active", listening);
       if (busy && heard) heard.textContent = "Mikrofon wird bereit …";
-      if (listening && heard) heard.textContent = "…";
+      if (listening && heard && (heard.textContent === "Mikrofon wird bereit …" || !heard.textContent)) {
+        heard.textContent = "Sprich jetzt … du kannst auch den Beispielsatz vorlesen.";
+      }
+    };
+
+    let noAudioTimer = null;
+    const clearNoAudioTimer = () => {
+      if (noAudioTimer) { clearTimeout(noAudioTimer); noAudioTimer = null; }
     };
 
     const start = async () => {
@@ -673,9 +680,36 @@ function runRound(main, config, onRestart) {
             timeoutMs: 12000,
             onStart: () => {
               if (state.alive && !state.answered) setMicState("listening");
+              clearNoAudioTimer();
+              noAudioTimer = setTimeout(() => {
+                if (!state.alive || state.answered || !listening) return;
+                if (heard && !heard.textContent.includes("Ich höre")) {
+                  heard.textContent = "Ich höre noch nichts – sprich bitte laut und deutlich.";
+                }
+              }, 4500);
+            },
+            onSpeechStart: () => {
+              clearNoAudioTimer();
+              if (!state.alive || state.answered) return;
+              if (label) label.textContent = "Ich höre dich …";
+              if (heard && (heard.textContent === "Sprich jetzt …" || heard.textContent.includes("noch nichts"))) {
+                heard.textContent = "Ich höre …";
+              }
             },
             onInterim: (text) => {
-              if (heard && state.alive) heard.textContent = text;
+              if (!heard || !state.alive || state.answered) return;
+              heard.textContent = text;
+              clearNoAudioTimer();
+              // Manche Browser liefern kein finales Ergebnis; bei eindeutig
+              // richtiger Interims-Erkennung direkt werten (auch Beispielsatz).
+              const interimCheck = checkAnswer(text, word);
+              const exText = exampleSpeechText(word.example);
+              const interimExample = !interimCheck.correct && exText
+                ? checkAnswer(text, { en: exText, alternatives: [] }).correct
+                : false;
+              if (interimCheck.correct || interimExample) {
+                try { state.recognizer?.stop(); } catch {}
+              }
             },
           });
           state.recognizer = recognizer;
@@ -683,6 +717,7 @@ function runRound(main, config, onRestart) {
           try {
             const result = await recognizer.promise;
             if (!state.alive || state.answered) return;
+            console.log("[session] speech result", result);
             if (heard) heard.textContent = result.transcript || "…";
             // Alle Alternativen prüfen – die Erkennung liefert oft gute Zweitvorschläge.
             const alternatives = result.alternatives?.length ? result.alternatives : [result.transcript];
@@ -697,20 +732,34 @@ function runRound(main, config, onRestart) {
             if (match) {
               submitAnswer(match.candidate, true, { source: "speech" });
             } else {
-              submitAnswer(result.transcript || "", false, {
-                source: "speech",
-                detected: result.transcript,
-                candidates: alternatives,
-              });
+              // Auch zählen, wenn das Zielwort im vorgelesenen Beispielsatz vorkommt.
+              const exampleText = exampleSpeechText(word.example);
+              let exampleMatch = null;
+              if (exampleText) {
+                for (const candidate of alternatives) {
+                  const ex = checkAnswer(candidate, { en: exampleText, alternatives: [] });
+                  if (ex.correct) { exampleMatch = candidate; break; }
+                }
+              }
+              if (exampleMatch) {
+                submitAnswer(exampleMatch, true, { source: "speech", detected: result.transcript, acceptedFromExample: true });
+              } else {
+                submitAnswer(result.transcript || "", false, {
+                  source: "speech",
+                  detected: result.transcript,
+                  candidates: alternatives,
+                });
+              }
             }
             return;
           } catch (error) {
             if (error?.code === "aborted") throw error;
+            console.warn("[session] speech attempt failed", { attempt, code: error?.code, message: error?.message });
             lastError = error;
             // Der erste Start scheitert auf manchen Browsern gelegentlich.
             // Ein automatischer Neustart entspricht "aus/an/aus/an".
             if (attempt === 0 && error?.code === "start-failed" && state.alive && !state.answered) {
-              await new Promise((r) => setTimeout(r, 220));
+              await new Promise((r) => setTimeout(r, 280));
               continue;
             }
             throw error;
@@ -738,6 +787,7 @@ function runRound(main, config, onRestart) {
           showTyping();
         }
       } finally {
+        clearNoAudioTimer();
         stopMicrophoneStream(microphone);
         // Immer zurück auf "bereit", damit der Button nie im aktiven
         // Zustand hängen bleibt (auch nach einem abgeschlossenen Versuch).
@@ -955,15 +1005,23 @@ function runRound(main, config, onRestart) {
       confetti({ count: 60, originY: 0.35 });
     }
 
-    // Nur bei maschineller Erkennung und nur, wenn die Abweichung klein
-    // genug für einen Hör-/Lesefehler ist. Beim Tippen entscheidet das Kind
-    // selbst, deshalb gibt es dort keine nachträgliche Wertung.
+    // Nachträgliche "dennoch richtig"-Wertung: bei Sprechübungen immer anbieten
+    // (Erkennung ist bei kurzen Wörtern oft unzuverlässig), bei Handschrift nur
+    // bei plausiblen Nahe-Treffern. Beim Tippen entscheidet das Kind selbst.
     const machineRecognized = meta.source === "speech" || meta.source === "handwriting";
     const candidates = [input, ...(meta.candidates || [])].filter(
       (value) => typeof value === "string" && value.trim()
     );
+    // In Sprechübungen auch akzeptieren, wenn das Wort im Beispielsatz vorkommt.
+    const exampleText = exampleSpeechText(word.example);
+    const exampleMatch =
+      !correct && meta.source === "speech" && exampleText
+        ? candidates.some((c) => checkAnswer(c, { en: exampleText, alternatives: [] }).correct)
+        : false;
     const canAccept =
-      !correct && machineRecognized && candidates.some((candidate) => isNearMiss(candidate, word));
+      !correct &&
+      (meta.source === "speech" ||
+        (machineRecognized && candidates.some((candidate) => isNearMiss(candidate, word))));
 
     const acceptance = canAccept
       ? {
@@ -1141,11 +1199,11 @@ function runRound(main, config, onRestart) {
       ? `<p class="small muted mb-0 mt-1">Auch richtig: ${alternatives.map((alt) => `„${esc(alt)}“`).join(", ")}</p>`
       : "";
 
-    // Nachträgliche Wertung nur bei Sprach-/Schrifterkennung anbieten.
+    // Nachträgliche Wertung: in Sprechübungen immer anbieten, sonst bei plausiblen Erkennungsfehlern.
     const acceptanceBlock = acceptance
       ? `
         <div class="feedback-accept">
-          <p class="small mb-1">Die Erkennung lag vielleicht daneben. War deine Antwort richtig?</p>
+          <p class="small mb-1">${mode === "speak" ? "Die Erkennung hat manchmal Probleme - warst du richtig?" : "Die Erkennung lag vielleicht daneben. War deine Antwort richtig?"}</p>
           <button type="button" class="btn btn-soft btn-small" data-action="accept-correct">
             ${icon("check")} Dennoch als richtig werten
           </button>

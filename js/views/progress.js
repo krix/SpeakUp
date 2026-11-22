@@ -41,7 +41,7 @@ export function renderProgress(main) {
   const earnedBadges = badges.filter((badge) => badge.earned);
   const milestones = learner.getMilestoneStates();
   const weak = learner.getWeakWords(allWords, 8);
-  const mastered = [...progress.values()].filter((record) => record.seen && record.box >= 5).length;
+  const mastered = [...progress.values()].filter((record) => learner.isMastered(record)).length;
   const started = [...progress.values()].filter((record) => record.seen).length;
   const seenTotal = Object.values(boxes).reduce((sum, value) => sum + value, 0);
   const accuracy =
