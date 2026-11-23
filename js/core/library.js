@@ -813,6 +813,45 @@ export async function applyImport({ themeId, newTheme = null, rows, mode = "add"
   return { themeId: targetThemeId, added, updated, skipped, removedWordIds, migrations, theme };
 }
 
+/** Fehlende mitgelieferte Standardthemen/Wörter hinzufügen, ohne eigene Inhalte zu löschen. */
+export async function addMissingDefaults() {
+  const defaults = await loadDefaults({ force: true }).catch(() => defaultsCache);
+  if (!defaults) throw new Error("Die Standardlisten sind gerade nicht verfügbar.");
+  const lib = requireLibrary();
+  const deletedThemes = new Set(lib.deletedThemes || []);
+  const deletedWords = new Set(lib.deletedWords || []);
+  const themeIds = new Set(lib.themes.map((theme) => theme.id));
+  const wordIds = new Set(lib.words.map((word) => word.id));
+  let addedThemes = 0;
+  let addedWords = 0;
+
+  for (const defaultTheme of defaults.themes) {
+    if (!themeIds.has(defaultTheme.id)) {
+      lib.themes.push(clone(defaultTheme));
+      themeIds.add(defaultTheme.id);
+      addedThemes++;
+    }
+    deletedThemes.delete(defaultTheme.id);
+  }
+
+  for (const defaultWord of defaults.words) {
+    if (!themeIds.has(defaultWord.themeId)) continue;
+    if (!wordIds.has(defaultWord.id)) {
+      lib.words.push(clone(defaultWord));
+      wordIds.add(defaultWord.id);
+      addedWords++;
+    }
+    deletedWords.delete(defaultWord.id);
+  }
+
+  lib.deletedThemes = [...deletedThemes];
+  lib.deletedWords = [...deletedWords];
+  lib.themes.sort((a, b) => a.order - b.order);
+  lib.dataVersion = defaults.dataVersion || lib.dataVersion;
+  await persist();
+  return { addedThemes, addedWords };
+}
+
 /** Standardlisten wiederherstellen (eigene Listen werden verworfen). */
 export async function resetToDefaults() {
   const defaults = await loadDefaults({ force: true }).catch(() => defaultsCache);

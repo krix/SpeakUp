@@ -1690,8 +1690,15 @@ export function renderParent(main) {
           <div class="settings-list">
             <div class="setting-row">
               <div class="setting-text">
+                <strong>Standardthemen hinzufügen</strong>
+                <small>Fügt fehlende mitgelieferte Themen und Wörter hinzu. Eigene Themen, eigene Wörter und dein Lernfortschritt bleiben erhalten.</small>
+              </div>
+              <button type="button" class="btn btn-ghost btn-small" data-action="add-defaults">Hinzufügen</button>
+            </div>
+            <div class="setting-row">
+              <div class="setting-text">
                 <strong>Standardlisten wiederherstellen</strong>
-                <small>Eigene Wörter und Themen werden verworfen. Der Fortschritt bleibt, wo die IDs gleich sind.</small>
+                <small>Setzt die Vokabelliste auf den Auslieferungszustand zurück. Eigene Themen und Wörter werden gelöscht. Der Lernfortschritt bleibt bei Wörtern erhalten, die es weiterhin gibt.</small>
               </div>
               <button type="button" class="btn btn-ghost btn-small" data-action="reset-library">Wiederherstellen</button>
             </div>
@@ -1749,6 +1756,28 @@ export function renderParent(main) {
     panel.querySelector('[data-action="download-template"]')?.addEventListener("click", () => {
       transfer.downloadCsvTemplate();
       showToast("CSV-Vorlage heruntergeladen.", { type: "success", iconName: "download" });
+    });
+
+    panel.querySelector('[data-action="add-defaults"]')?.addEventListener("click", async () => {
+      const ok = await confirmDialog({
+        title: "Standardthemen hinzufügen?",
+        message: "Fehlende mitgelieferte Themen und Wörter werden ergänzt. Deine eigenen Themen, Wörter und dein Lernfortschritt bleiben erhalten.",
+        confirmLabel: "Hinzufügen",
+      });
+      if (!ok) return;
+      try {
+        const result = await library.addMissingDefaults();
+        const added = (result.addedThemes || 0) + (result.addedWords || 0);
+        showToast(
+          added > 0
+            ? `${result.addedThemes || 0} Themen und ${result.addedWords || 0} Wörter hinzugefügt.`
+            : "Alle Standardthemen sind bereits vorhanden.",
+          { type: added > 0 ? "success" : "info", iconName: added > 0 ? "check" : "info" }
+        );
+        renderPanel();
+      } catch (error) {
+        showToast(error.message || "Standardthemen konnten nicht hinzugefügt werden.", { type: "error" });
+      }
     });
 
     panel.querySelector('[data-action="reset-library"]')?.addEventListener("click", async () => {
