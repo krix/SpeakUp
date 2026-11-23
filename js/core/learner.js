@@ -20,6 +20,7 @@ export const LEITNER_LABELS = {
 };
 
 export const LEVEL_THRESHOLDS = [0, 80, 200, 360, 560, 800, 1100, 1450, 1850, 2300, 2800, 3400, 4100, 4900, 5800];
+export const POINTS_PER_CORRECT = 1;
 export const POINTS_PER_MASTERY = 10;
 
 /** Einmalige Punkt-Meilensteine mit kindgerechten Belohnungen. */

@@ -44,7 +44,8 @@ import { confetti } from "../ui/confetti.js";
 import { showConsentModal } from "./onboarding.js";
 
 const ROUND_SIZE = 10;
-// Punkte werden nur beim Meistern eines Wortes vergeben (learner.POINTS_PER_MASTERY).
+// Punkte: 1 Punkt pro richtiger Antwort bei noch nicht gemeisterten Wörtern,
+// zusätzlich Bonus beim erstmaligen Meistern (learner.POINTS_PER_MASTERY).
 const MAX_QUEUE = 24;
 
 const MODE_INFO = {
@@ -982,12 +983,17 @@ function runRound(main, config, onRestart) {
       recordPromise = learner
         .recordAttempt(word.id, true, { promote, mode: current.mode })
         .then((record) => {
-          if (!wasMastered && learner.isMastered(record)) {
-            masteryGranted = true;
-            gained = learner.POINTS_PER_MASTERY;
-            state.points += gained;
-            floatPoints(gained);
-            showToast(`Wort gemeistert! +${gained} Punkte`, { type: "success", iconName: "star" });
+          if (!wasMastered) {
+            gained = learner.POINTS_PER_CORRECT;
+            if (learner.isMastered(record)) {
+              masteryGranted = true;
+              gained += learner.POINTS_PER_MASTERY;
+              showToast(`Wort gemeistert! +${gained} Punkte`, { type: "success", iconName: "star" });
+            }
+            if (gained > 0) {
+              state.points += gained;
+              floatPoints(gained);
+            }
           }
           return record;
         })
@@ -1146,7 +1152,7 @@ function runRound(main, config, onRestart) {
       await learner.restoreProgress(attempt.word.id, attempt.previousProgress);
       const record = await learner.recordAttempt(attempt.word.id, true, { promote: attempt.firstAttempt, mode: attempt.mode });
       attempt.masteredNow = !attempt.wasMastered && learner.isMastered(record);
-      attempt.gained = attempt.masteredNow ? learner.POINTS_PER_MASTERY : 0;
+      attempt.gained = !attempt.wasMastered ? learner.POINTS_PER_CORRECT + (attempt.masteredNow ? learner.POINTS_PER_MASTERY : 0) : 0;
     } catch (error) {
       console.error("[session] Nachträgliche Wertung fehlgeschlagen", error);
       showToast("Das konnte gerade nicht gespeichert werden. Versuch es noch einmal.", {
@@ -1252,7 +1258,7 @@ function runRound(main, config, onRestart) {
         <span class="feedback-icon">${icon(correct ? "check" : "close")}</span>
         <div>
           <h2 class="feedback-title">${esc(title)}</h2>
-          <p class="mb-0">${correct ? (gained > 0 ? `${icon("star", "icon-star")} +${gained} Punkte` : "Richtig! Punkte gibt es, wenn du das Wort meisterst.") : "Beim nächsten Mal klappt es!"}</p>
+          <p class="mb-0">${correct ? (gained > 0 ? `${icon("star", "icon-star")} +${gained} ${gained === 1 ? "Punkt" : "Punkte"}` : "Richtig! Für bereits gemeisterte Wörter gibt es keine Punkte mehr.") : "Beim nächsten Mal klappt es!"}</p>
         </div>
       </div>
       <div class="feedback-solution">
@@ -1384,7 +1390,7 @@ function runRound(main, config, onRestart) {
         <h1 class="result-title">${stars === 3 ? "Fantastisch!" : stars === 2 ? "Super gemacht!" : "Gut geübt!"}</h1>
         <p class="muted mb-2">${esc(state.themeName)} · ${plural(total, "Wort", "Wörter")} · ${esc(MODE_INFO[state.baseMode]?.label || "Mix")}</p>
         <span class="result-points" id="result-points">${icon("star", "icon-star")} +${totalPoints} Punkte</span>
-        <span class="tiny bold mt-1" id="result-points-note">${wheelReward.points > 0 ? "inklusive Glücksrad-Überraschung" : "Punkte für gemeisterte Wörter"}</span>
+        <span class="tiny bold mt-1" id="result-points-note">${wheelReward.points > 0 ? "inklusive Glücksrad-Überraschung" : "Punkte für richtige Antworten und gemeisterte Wörter"}</span>
         <div class="result-stats">
           <div class="result-stat"><strong>${state.firstTryCorrect} / ${total}</strong><span>beim ersten Versuch</span></div>
           <div class="result-stat"><strong>${state.maxStreak}</strong><span>beste Serie</span></div>
