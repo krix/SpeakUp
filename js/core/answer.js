@@ -8,6 +8,8 @@ import { normalizeKey } from "./hash.js";
 export function normalizeAnswer(value) {
   return String(value ?? "")
     .replace(/<[^>]*>/g, " ") // HTML-Tags aus Vokabeldaten ignorieren
+    .replace(/\([^)]*\)|\[[^\]]*\]|\{[^}]*\}/g, " ") // Zusatzinfos wie (irr), [BE] ignorieren
+    .replace(/\.{2,}|…/g, " ") // Platzhalter wie .../… ignorieren
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "") // Akzente entfernen (café → cafe)
     .replace(/ß/g, "ss")
