@@ -10,7 +10,7 @@
  * Beim Aktualisieren wird der neue Worker erst nach einer Nutzer-Bestätigung
  * aktiv (SKIP_WAITING). So bleibt eine laufende Lernrunde ununterbrochen.
  */
-const APP_VERSION = "1.7.21";
+const APP_VERSION = "1.7.22";
 const SHELL_CACHE = `speakup-shell-v${APP_VERSION}`;
 const DATA_CACHE = `speakup-data-v${APP_VERSION}`;
 
@@ -63,11 +63,10 @@ const PRECACHE = [
   "./js/views/progress.js",
   "./js/views/session.js",
   "./data/index.json",
-  "./data/tiere.csv",
   "./data/schule.csv",
-  "./data/essen.csv",
-  "./data/hobbys.csv",
-  "./data/reisen.csv",
+  "./data/zuhause.csv",
+  "./data/zahlen.csv",
+  "./data/farben.csv",
 ];
 
 /** Entfernt den Query-String, damit ?v=… denselben Cache-Eintrag trifft. */

@@ -306,12 +306,36 @@ function mergeDefaults(stored, defaults) {
     }
   }
 
+  // Veraltete Standard-Themen entfernen (nur unveränderte Standard-Themen).
+  const defaultThemeIds = new Set(defaults.themes.map((t) => t.id));
+  const removedThemeIds = new Set();
+  for (const theme of [...merged.themes]) {
+    if (theme.origin === "default" && !theme.edited && !defaultThemeIds.has(theme.id)) {
+      removedThemeIds.add(theme.id);
+      merged.themes = merged.themes.filter((t) => t.id !== theme.id);
+      merged.deletedThemes = merged.deletedThemes.filter((id) => id !== theme.id);
+    }
+  }
+  // Veraltete Standard-Wörter entfernen (nur unveränderte Standard-Wörter).
+  const defaultWordIds = new Set(defaults.words.map((w) => w.id));
+  const removedWordIds = new Set();
+  merged.words = merged.words.filter((word) => {
+    const staleTheme = removedThemeIds.has(word.themeId);
+    const staleWord = word.origin === "default" && !word.edited && defaultThemeIds.has(word.themeId) && !defaultWordIds.has(word.id);
+    if (staleTheme || staleWord) {
+      removedWordIds.add(word.id);
+      return false;
+    }
+    return true;
+  });
+  // Tombstones für entfernte Standardinhalte bereinigen.
+  merged.deletedWords = [...deletedWords].filter((id) => !removedWordIds.has(id) && !defaultWordIds.has(id));
+  merged.deletedThemes = [...new Set(merged.deletedThemes)].filter((id) => !removedThemeIds.has(id));
+
   merged.themes.sort((a, b) => a.order - b.order);
   merged.dataVersion = defaults.dataVersion;
-  merged.deletedWords = [...deletedWords];
-  merged.deletedThemes = [...deletedThemes];
 
-  return { library: merged, migrations, addedWords, addedThemes, updatedWords };
+  return { library: merged, migrations, addedWords, addedThemes, updatedWords, removedWordIds: [...removedWordIds] };
 }
 
 /** Beim App-Start aufrufen. */
@@ -349,7 +373,7 @@ export async function init() {
   }
 
   library = normalizeStoredLibrary(stored);
-  let merge = { addedWords: 0, addedThemes: 0, updatedWords: 0, migrations: [] };
+  let merge = { addedWords: 0, addedThemes: 0, updatedWords: 0, migrations: [], removedWordIds: [] };
   if (defaults) merge = mergeDefaults(library, defaults);
 
   // Falls die gespeicherte Version älter ist, aber keine Änderungen erkannt
@@ -358,7 +382,7 @@ export async function init() {
     library.dataVersion = defaults.dataVersion;
   }
 
-  const changed = merge.addedWords + merge.addedThemes + merge.updatedWords > 0;
+  const changed = merge.addedWords + merge.addedThemes + merge.updatedWords > 0 || (merge.removedWordIds?.length || 0) > 0;
   if (changed) await persist({ silent: true });
   else if (defaults && String(stored.dataVersion) !== library.dataVersion) await persist({ silent: true });
 
@@ -368,6 +392,7 @@ export async function init() {
     addedWords: merge.addedWords,
     addedThemes: merge.addedThemes,
     updatedWords: merge.updatedWords,
+    removedWordIds: merge.removedWordIds || [],
     migrations,
   };
   return initInfo;

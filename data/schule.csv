@@ -1,21 +1,21 @@
-deutsch;englisch;alternativen;beispielsatz;emoji
-Schule;school;;Our school is cool.;🏫
-Lehrer;teacher;;The teacher helps us.;🧑‍🏫
-Schüler;pupil;student;The pupil reads a book.;🧑‍🎓
-Buch;book;;I read a book.;📚
-Heft;notebook;exercise book;I write in my notebook.;📓
-Stift;pen;;My pen is blue.;🖊️
-Bleistift;pencil;;I draw with a pencil.;✏️
-Tafel;blackboard;board;The teacher writes on the blackboard.;📝
-Hausaufgabe;homework;;I do my homework.;📖
-Pause;break;;We play in the break.;⏸️
-Klasse;class;classroom;Our class has 25 pupils.;👥
-Rucksack;backpack;school bag;My backpack is heavy.;🎒
-Lineal;ruler;;I need a ruler.;📏
-Schere;scissors;;The scissors are sharp.;✂️
-Tisch;table;desk;The table is big.;🪑
-Stuhl;chair;;Please sit on the chair.;🪑
-Fenster;window;;Open the window.;🪟
-Tür;door;;Close the door.;🚪
-Wort;word;;I learn a new word.;🔤
-Frage;question;;I have a question.;❓
+deutsch;englisch;alternativen;beispielsatz;emoji;imageUrl;audioUrl
+Schule;school;;This is my _school_.;🏫;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Fimage%2Fschool.jpg?alt=media;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Faudio%2Fschool.mp3?alt=media
+Lehrer/in;teacher;teacher;The _teacher_ helps us.;🧑‍🏫;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Fimage%2Fteacher.jpg?alt=media;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Faudio%2Fteacher.mp3?alt=media
+Schüler/in;pupil;student;The _pupil_ is in my class.;🧑‍🎓;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Fimage%2Fstudent.jpg?alt=media;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Faudio%2Fstudent.mp3?alt=media
+Buch;book;;I read a _book_.;📚;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Fimage%2Fbook.jpg?alt=media;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Faudio%2Fbook.mp3?alt=media
+Heft;exercise book;notebook;I write in my _exercise book_.;📓;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Fimage%2Fexercise_book.jpg?alt=media;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Faudio%2Fexercise_book.mp3?alt=media
+Bleistift;pencil;;I write with a _pencil_.;✏️;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Fimage%2Fpencil.jpg?alt=media;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Faudio%2Fpencil.mp3?alt=media
+Stift;pen;;The _pen_ is blue.;🖊️;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Fimage%2Fpen.jpg?alt=media;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Faudio%2Fpen.mp3?alt=media
+Lineal;ruler;;I need a _ruler_.;📏;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Fimage%2Fruler.jpg?alt=media;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Faudio%2Fruler.mp3?alt=media
+Radiergummi;rubber;eraser;I use a _rubber_ for mistakes.;🧽;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Fimage%2Frubber.jpg?alt=media;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Faudio%2Frubber.mp3?alt=media
+Federmäppchen;pencil case;;My _pencil case_ is red.;👝;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Fimage%2Fpencil_case.jpg?alt=media;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Faudio%2Fpencil_case.mp3?alt=media
+Schultasche;school bag;backpack;My _school bag_ is heavy.;🎒;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FJiV5V1pQHcx0dRuKKHCG%2Ffiles%2Fimage%2Fbag.jpg?alt=media;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FJiV5V1pQHcx0dRuKKHCG%2Ffiles%2Faudio%2Fbag.mp3?alt=media
+Schere;scissors;;Be careful with the _scissors_.;✂️;;
+Papier;paper;;I write on _paper_.;📄;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Fimage%2Fpaper.jpg?alt=media;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Faudio%2Fpaper.mp3?alt=media
+Schreibtisch;desk;;My book is on the _desk_.;🪑;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Fimage%2Fdesk.jpg?alt=media;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Faudio%2Fdesk.mp3?alt=media
+Stuhl;chair;;Sit on the _chair_, please.;🪑;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Fimage%2Fchair.jpg?alt=media;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Faudio%2Fchair.mp3?alt=media
+Klassenzimmer;classroom;;Our _classroom_ is big.;🏫;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Fimage%2Fclassroom.jpg?alt=media;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Faudio%2Fclassroom.mp3?alt=media
+Tafel;board;blackboard|whiteboard;The teacher writes on the _board_.;🧑‍🏫;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Fimage%2Fboard_game.jpg?alt=media;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Faudio%2Fboard_game.mp3?alt=media
+Hausaufgaben;homework;;I do my _homework_.;📖;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Fimage%2Fhomework.jpg?alt=media;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Faudio%2Fhomework.mp3?alt=media
+Kleber;glue;glue stick;I use _glue_ for my picture.;🧴;;
+Spitzer;pencil sharpener;;I use a _pencil sharpener_.;✏️;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Fimage%2Fpencil_sharpener.jpg?alt=media;https://firebasestorage.googleapis.com/v0/b/iw-iwk00110-vokabel-2019.appspot.com/o/book%2FsGSjiQCrLM5T3uUgn50X%2Ffiles%2Faudio%2Fpencil_sharpener.mp3?alt=media

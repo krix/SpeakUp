@@ -299,6 +299,9 @@ async function boot() {
         await learner.migrateProgress(migration.from, migration.to);
       }
     }
+    if ((info.removedWordIds || []).length) {
+      await learner.pruneProgress(library.getAllWords().map((word) => word.id));
+    }
 
     // Bestehende Daten als erstes Profil übernehmen bzw. Profilstand laden.
     await profiles.init();

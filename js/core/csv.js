@@ -16,9 +16,11 @@ const HEADER_ALIASES = {
   alternatives: ["alternativen", "alternative", "alternatives", "synonyme", "weitere"],
   example: ["beispielsatz", "beispiel", "satz", "example", "examples", "beispielsaetze"],
   emoji: ["emoji", "bild", "symbol", "icon"],
+  imageUrl: ["imageurl", "image_url", "bildurl", "bild_url", "image", "bildadresse"],
+  audioUrl: ["audiourl", "audio_url", "audiourl", "soundurl", "audio"],
 };
 
-export const CSV_HEADER = ["deutsch", "englisch", "alternativen", "beispielsatz", "emoji"];
+export const CSV_HEADER = ["deutsch", "englisch", "alternativen", "beispielsatz", "emoji", "imageUrl", "audioUrl"];
 
 function cleanHeaderCell(value) {
   return normalizeKey(value).replace(/[._-]+/g, " ").trim();
@@ -181,7 +183,7 @@ export function parseVocabularyCsv(rawText, options = {}) {
     warnings.push(
       "Keine Kopfzeile erkannt. Die Spalten werden in dieser Reihenfolge gelesen: deutsch;englisch;alternativen;beispielsatz;emoji."
     );
-    mapping = { de: 0, en: 1, alternatives: 2, example: 3, emoji: 4 };
+    mapping = { de: 0, en: 1, alternatives: 2, example: 3, emoji: 4, imageUrl: 5, audioUrl: 6 };
   }
 
   const headerLength = Math.max(rows[0].length, 5);
@@ -197,6 +199,8 @@ export function parseVocabularyCsv(rawText, options = {}) {
       alternatives: [],
       example: "",
       emoji: "",
+      imageUrl: "",
+      audioUrl: "",
       raw: cells,
       errors: [],
       warnings: [],
@@ -215,6 +219,8 @@ export function parseVocabularyCsv(rawText, options = {}) {
     entry.alternatives = splitAlternatives(read("alternatives"));
     entry.example = read("example");
     entry.emoji = read("emoji");
+    entry.imageUrl = read("imageUrl");
+    entry.audioUrl = read("audioUrl");
 
     const limit = Math.max(headerLength, maxIndex + 1);
     if (cells.length > limit) {
@@ -278,6 +284,8 @@ export function toCsv(entries, { delimiter = ";", includeHeader = true } = {}) {
       Array.isArray(entry.alternatives) ? entry.alternatives.join("|") : entry.alternatives ?? "",
       entry.example ?? "",
       entry.emoji ?? "",
+      entry.imageUrl ?? "",
+      entry.audioUrl ?? "",
     ];
     lines.push(row.map((cell) => quoteCell(cell, delimiter)).join(delimiter));
   }

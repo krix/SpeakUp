@@ -50,7 +50,7 @@ export function renderAbout(main) {
           <div class="panel about-step">
             <span class="about-step-number">1</span>
             <h3>${icon("menu")} Thema &amp; Modus wählen</h3>
-            <p>Fünf Welten von Tieren bis Reisen. Übe nur Sprechen, nur Hören,
+            <p>Vier Welten für den Einstieg: Schule, Zu Hause, Zahlen und Farben. Übe nur Sprechen, nur Hören,
             nur Schreiben – oder alles im Mix.</p>
           </div>
           <div class="panel about-step">

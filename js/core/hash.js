@@ -28,13 +28,13 @@ export function normalizeKey(value) {
     .trim();
 }
 
-/** Stabile, lesbare Wort-ID, z. B. "tiere.k3x9a2b1c". */
+/** Stabile, lesbare Wort-ID, z. B. "schule.k3x9a2b1c". */
 export function makeWordId(themeId, de, en) {
   const base = `${themeId}|${normalizeKey(de)}|${normalizeKey(en)}`;
   return `${themeId}.${cyrb53(base).toString(36)}`;
 }
 
-/** Themen-IDs aus Namen erzeugen, z. B. "Essen & Trinken" → "essen-trinken". */
+/** Themen-IDs aus Namen erzeugen, z. B. "Zu Hause" → "zu-hause". */
 export function slugify(text, fallback = "thema") {
   const slug = String(text ?? "")
     .normalize("NFD")

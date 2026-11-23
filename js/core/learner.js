@@ -54,7 +54,7 @@ const DEFAULT_SETTINGS = {
   speechProvider: "browser",
   speechModel: "gemini-3.5-flash-lite",
   mode: "mix",
-  lastThemeId: "tiere",
+  lastThemeId: "schule",
   handwriting: true,
   // Anbieter: "google-input-tools" | "google-vision" | "gemini" | "off"
   handwritingProvider: "google-input-tools",

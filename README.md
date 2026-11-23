@@ -103,7 +103,7 @@ Beim ersten Start erscheint der Datenschutz-Hinweis. Dort wird erklärt, wann Sp
 
 ### Kurzer Testparcours
 
-1. Startseite: Modus **Mix** wählen, Thema **Tiere** öffnen.
+1. Startseite: Modus **Mix** wählen, Thema **Schule** öffnen.
 2. Eine Runde mit Tippen abschließen (Mikrofon ggf. verweigern).
 3. Unter **Fortschritt** Punkte, Boxen und Abzeichen prüfen.
 4. **Eltern** öffnen, Rechenaufgabe lösen, ein Wort hinzufügen.
@@ -160,11 +160,10 @@ SpeakUp/
 │     └─ session.js        Lernrunde
 ├─ data/
 │  ├─ index.json           Themenliste und Datenversion
-│  ├─ tiere.csv            20 Wörter
 │  ├─ schule.csv           20 Wörter
-│  ├─ essen.csv            20 Wörter
-│  ├─ hobbys.csv           20 Wörter
-│  └─ reisen.csv           20 Wörter
+│  ├─ zuhause.csv          20 Wörter
+│  ├─ zahlen.csv           28 Wörter
+│  └─ farben.csv           11 Wörter
 ├─ assets/
 │  ├─ logo.png             Logo-Vorlage für alle App-Icons
 │  └─ fonts/               selbst gehostete Nunito-Dateien
@@ -214,11 +213,10 @@ Katze;cat;kitty;My cat is black.;🐱
 
 Die mitgelieferten Dateien enthalten jeweils **20 Wörter** zu den Themen:
 
-1. **Tiere** (`tiere`) – frei ab 0 Punkten
-2. **Schule** (`schule`) – frei ab 0 Punkten
-3. **Essen & Trinken** (`essen`) – ab 60 Punkten
-4. **Hobbys & Freizeit** (`hobbys`) – ab 120 Punkten
-5. **Reisen** (`reisen`) – ab 200 Punkten
+1. **Schule** (`schule`) – frei ab 0 Punkten
+2. **Zu Hause** (`zuhause`) – frei ab 0 Punkten
+3. **Zahlen** (`zahlen`) – frei ab 0 Punkten
+4. **Farben** (`farben`) – frei ab 0 Punkten
 
 ---
 
@@ -354,7 +352,7 @@ Beim Laden gilt: Profile mit gleicher ID oder gleichem Namen werden durch die Cl
 Jedes Wort erhält eine ID aus einem Hash über **Thema + Deutsch + Englisch**:
 
 ```js
-makeWordId("tiere", "Hund", "dog");
+makeWordId("schule", "Buch", "book");
 ```
 
 Daraus folgen die Regeln:
