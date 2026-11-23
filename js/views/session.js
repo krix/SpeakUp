@@ -649,6 +649,12 @@ function runRound(main, config, onRestart) {
               break;
             }
           }
+          // Manche Erkenner liefern Wörter getrennt ("to", "find", "out").
+          if (!match && alternatives.length > 1) {
+            const joined = alternatives.join(" ").trim();
+            const joinedCheck = checkAnswer(joined, word);
+            if (joinedCheck.correct) match = { candidate: joined, check: joinedCheck };
+          }
           if (match) {
             submitAnswer(match.candidate, true, { source: "speech" });
           } else {
@@ -726,6 +732,12 @@ function runRound(main, config, onRestart) {
                 break;
               }
             }
+            // Manche Erkenner liefern Wörter getrennt ("to", "find", "out").
+            if (!match && alternatives.length > 1) {
+              const joined = alternatives.join(" ").trim();
+              const joinedCheck = checkAnswer(joined, word);
+              if (joinedCheck.correct) match = { candidate: joined, check: joinedCheck };
+            }
             if (match) {
               submitAnswer(match.candidate, true, { source: "speech" });
             } else {
@@ -736,6 +748,11 @@ function runRound(main, config, onRestart) {
                 for (const candidate of alternatives) {
                   const ex = checkAnswer(candidate, { en: exampleText, alternatives: [] });
                   if (ex.correct) { exampleMatch = candidate; break; }
+                }
+                if (!exampleMatch && alternatives.length > 1) {
+                  const joined = alternatives.join(" ").trim();
+                  const ex = checkAnswer(joined, { en: exampleText, alternatives: [] });
+                  if (ex.correct) exampleMatch = joined;
                 }
               }
               if (exampleMatch) {
@@ -919,6 +936,15 @@ function runRound(main, config, onRestart) {
         if (check.correct) {
           match = { candidate, check };
           break;
+        }
+      }
+      // Manche Erkenner liefern Wörter getrennt ("to", "find", "out").
+      // Zusammengesetzt prüfen, damit das als richtige Antwort zählt.
+      if (!match && candidates.length > 1) {
+        const joined = candidates.join(" ").trim();
+        const joinedCheck = checkAnswer(joined, word);
+        if (joinedCheck.correct) {
+          match = { candidate: joined, check: joinedCheck };
         }
       }
       if (match) {
