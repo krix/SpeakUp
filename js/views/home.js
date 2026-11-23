@@ -203,7 +203,7 @@ export function renderHome(main) {
               <span class="theme-card-meta">${allUnlockedWords} Wörter aus ${unlocked.length} ${unlocked.length === 1 ? "Welt" : "Welten"}</span>
               <span class="theme-progress">
                 <span class="theme-progress-top"><span>Überraschungsrunde</span><span>Mix</span></span>
-                <span class="progress-track"><span class="progress-fill" style="width:100%"></span></span>
+                <span class="progress-track"><span class="progress-fill is-mix" style="width:100%"></span></span>
               </span>
               <span class="go">${icon("forward")} Quer durch alle Themen</span>
             </button>

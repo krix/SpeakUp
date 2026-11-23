@@ -10,7 +10,7 @@
  * Beim Aktualisieren wird der neue Worker erst nach einer Nutzer-Bestätigung
  * aktiv (SKIP_WAITING). So bleibt eine laufende Lernrunde ununterbrochen.
  */
-const APP_VERSION = "1.7.25";
+const APP_VERSION = "1.7.26";
 const SHELL_CACHE = `speakup-shell-v${APP_VERSION}`;
 const DATA_CACHE = `speakup-data-v${APP_VERSION}`;
 

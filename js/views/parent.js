@@ -1935,7 +1935,7 @@ export function renderParent(main) {
           </div>
 
           <div class="stat-grid">
-            <div class="stat-card"><span class="stat-icon">${icon("chart")}</span><strong>${started}</strong><span>Wörter angefangen</span></div>
+            <div class="stat-card"><span class="stat-icon">${icon("chart")}</span><strong>${started}</strong><span>Wörter geübt</span></div>
             <div class="stat-card"><span class="stat-icon">${icon("star")}</span><strong>${mastered}</strong><span>gemeistert</span></div>
             <div class="stat-card"><span class="stat-icon">${icon("mic")}</span><strong>${profile.speakCorrect || 0}</strong><span>richtig gesprochen</span></div>
             <div class="stat-card"><span class="stat-icon">${icon("pencil")}</span><strong>${profile.writeCorrect || 0}</strong><span>richtig geschrieben</span></div>

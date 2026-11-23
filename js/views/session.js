@@ -1258,7 +1258,7 @@ function runRound(main, config, onRestart) {
         <span class="feedback-icon">${icon(correct ? "check" : "close")}</span>
         <div>
           <h2 class="feedback-title">${esc(title)}</h2>
-          <p class="mb-0">${correct ? (gained > 0 ? `${icon("star", "icon-star")} +${gained} ${gained === 1 ? "Punkt" : "Punkte"}` : "Richtig! Für bereits gemeisterte Wörter gibt es keine Punkte mehr.") : "Beim nächsten Mal klappt es!"}</p>
+          <p class="mb-0">${correct ? (gained > 0 ? `${icon("star", "icon-star")} +${gained} ${gained === 1 ? "Punkt" : "Punkte"}` : "Richtig! Dieses Wort hast du schon gemeistert.") : "Beim nächsten Mal klappt es!"}</p>
         </div>
       </div>
       <div class="feedback-solution">
@@ -1390,7 +1390,7 @@ function runRound(main, config, onRestart) {
         <h1 class="result-title">${stars === 3 ? "Fantastisch!" : stars === 2 ? "Super gemacht!" : "Gut geübt!"}</h1>
         <p class="muted mb-2">${esc(state.themeName)} · ${plural(total, "Wort", "Wörter")} · ${esc(MODE_INFO[state.baseMode]?.label || "Mix")}</p>
         <span class="result-points" id="result-points">${icon("star", "icon-star")} +${totalPoints} Punkte</span>
-        <span class="tiny bold mt-1" id="result-points-note">${wheelReward.points > 0 ? "inklusive Glücksrad-Überraschung" : "Punkte für richtige Antworten und gemeisterte Wörter"}</span>
+        <span class="tiny bold mt-1" id="result-points-note">${wheelReward.points > 0 ? "inklusive Glücksrad-Überraschung" : "Punkte für richtige Antworten bei noch nicht gemeisterten Wörtern"}</span>
         <div class="result-stats">
           <div class="result-stat"><strong>${state.firstTryCorrect} / ${total}</strong><span>beim ersten Versuch</span></div>
           <div class="result-stat"><strong>${state.maxStreak}</strong><span>beste Serie</span></div>

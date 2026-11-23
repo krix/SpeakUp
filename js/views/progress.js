@@ -57,7 +57,7 @@ export function renderProgress(main) {
   const statCards = [
     { iconName: "star", value: profile.points, label: "Punkte gesammelt" },
     { iconName: "check", value: `${mastered} / ${allWords.length}`, label: "Wörter gemeistert" },
-    { iconName: "chart", value: started, label: "Wörter angefangen" },
+    { iconName: "chart", value: started, label: "Wörter geübt" },
     { iconName: "mic", value: speakAcc === null ? "–" : `${speakAcc} %`, label: `Sprechen (${speakCorrect}/${speakSeen})` },
     { iconName: "pencil", value: writeAcc === null ? "–" : `${writeAcc} %`, label: `Schreiben (${writeCorrect}/${writeSeen})` },
     { iconName: "flame", value: `${streak} ${streak === 1 ? "Tag" : "Tage"}`, label: "Aktuelle Serie" },
@@ -82,7 +82,7 @@ export function renderProgress(main) {
               <div class="progress-fill ${percent >= 100 ? "green" : ""}" style="width:${percent}%"></div>
             </div>
             <div class="tiny muted" style="margin-top:4px">
-              ${stats.started}/${stats.total} angefangen · ${speakPct === null ? "Sprechen –" : `Sprechen ${speakPct}%`} · ${writePct === null ? "Schreiben –" : `Schreiben ${writePct}%`}
+              ${stats.started}/${stats.total} geübt · ${speakPct === null ? "Sprechen –" : `Sprechen ${speakPct}% richtig`} · ${writePct === null ? "Schreiben –" : `Schreiben ${writePct}% richtig`}
             </div>
           </div>
           <div class="row" style="gap:4px">
@@ -196,7 +196,7 @@ export function renderProgress(main) {
       <section aria-labelledby="themes-title">
         <div class="section-head">
           <h2 id="themes-title">Deine Themen</h2>
-          <p>Gemeistert = 5-mal richtig in Folge (Box 5)</p>
+          <p>Gemeistert = 5× richtig, davon mindestens 2× Sprechen und 2× Schreiben/Hören</p>
         </div>
         <div class="theme-progress-list">${themeRows}</div>
       </section>
@@ -204,12 +204,12 @@ export function renderProgress(main) {
       <section aria-labelledby="boxes-title">
         <div class="section-head">
           <h2 id="boxes-title">Wiederholungs-Boxen</h2>
-          <p>Leitner-System: Box 5 ist sicher im Langzeitgedächtnis</p>
+          <p>Richtige Antworten lassen Wörter aufsteigen. Für Box 5 brauchst du 5 Treffer insgesamt, davon mindestens 2 beim Sprechen und 2 beim Schreiben/Hören.</p>
         </div>
         <div class="panel">
           <div class="box-chart">${boxRows}</div>
           <p class="tiny muted mb-0 mt-2">
-            Richtig beantwortete Wörter wandern eine Box weiter. Fehler bringen sie zurück in Box 1.
+            Richtige Antworten lassen ein Wort aufsteigen. Bei einem Fehler geht es zurück in Box 1. Für Box 5 zählen nur Wörter, die die Meister-Regel erfüllen.
           </p>
         </div>
       </section>
