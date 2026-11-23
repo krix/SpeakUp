@@ -1250,6 +1250,11 @@ function runRound(main, config, onRestart) {
       ? `<p class="feedback-accepted">${icon("check")} Als richtig gewertet</p>`
       : "";
 
+    // Frage ausblenden, damit der Feedback-Bereich inkl. "Weiter"-Button
+    // auf kleinen Bildschirmen nicht unter der Tabbar verschwindet.
+    const questionCard = stage.querySelector(".question-card");
+    if (questionCard) questionCard.hidden = true;
+
     const card = document.createElement("div");
     card.className = `feedback-card ${correct ? "" : "is-wrong"}`.trim();
     card.setAttribute("role", "status");
@@ -1315,10 +1320,14 @@ function runRound(main, config, onRestart) {
     });
     card.querySelector('[data-action="show-typing"]')?.addEventListener("click", () => {
       // Nach einer falschen Antwort direkt noch einmal tippen.
+      // Frage wieder einblenden, damit das Tippfeld sichtbar ist.
       state.answered = false;
       state.wrongByWord.set(word.id, 0);
+      const qCard = stage.querySelector(".question-card");
+      if (qCard) qCard.hidden = false;
       showTyping();
       card.remove();
+      qCard?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     });
     card.querySelector('[data-action="next"]')?.addEventListener("click", (event) => {
       event.currentTarget.disabled = true;

@@ -621,6 +621,8 @@ main:focus:not(:focus-visible) { outline: none; }
   background: var(--c-green-soft);
   border: 2px solid #A9E3C1;
   animation: pop .3s var(--ease-pop);
+  /* Sicherstellen, dass der Weiter-Button über der Tabbar fokussierbar bleibt. */
+  scroll-margin-bottom: calc(var(--nav-h) + 24px + env(safe-area-inset-bottom));
 }
 .feedback-card.is-wrong { background: var(--c-red-soft); border-color: #FFBFC5; }
 .feedback-head { display: flex; align-items: center; gap: 14px; }
