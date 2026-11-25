@@ -2,7 +2,8 @@
  * Elternbereich – durch eine Rechenaufgabe geschützt.
  *
  * Tabs:
- *   Wörter      – Wörter ansehen, anlegen, bearbeiten, sortieren, löschen
+ *   Wörter      – Wörter ansehen, anlegen, bearbeiten, sortieren, auswählen,
+ *                 löschen und zwischen Kapiteln/Themen verschieben
  *   Themen      – Themen anlegen, bearbeiten, sortieren, löschen, CSV exportieren
  *   Import      – CSV aus Datei, Einfügen oder URL mit Vorschau importieren
  *   Sichern     – JSON-Backup, CSV-Export, Wiederherstellen, Zurücksetzen
@@ -180,6 +181,8 @@ export function renderParent(main) {
     tab: "words",
     themeId: themes[0]?.id || null,
     search: "",
+    selectedWordIds: new Set(),
+    bulkBusy: false,
     statsSearch: "",
     statsSort: "wrong",
     import: freshImportState(themes[0]?.id),
@@ -317,6 +320,10 @@ export function renderParent(main) {
       .join("");
     const theme = state.themeId ? library.getTheme(state.themeId) : null;
     const words = theme ? library.getWords(theme.id) : [];
+    const wordIds = new Set(words.map((word) => word.id));
+    for (const id of [...state.selectedWordIds]) {
+      if (!wordIds.has(id)) state.selectedWordIds.delete(id);
+    }
     const progress = learner.getProgressMap();
     const query = state.search.trim().toLowerCase();
     const visible = query
@@ -353,12 +360,26 @@ export function renderParent(main) {
           <button type="button" class="btn btn-ghost btn-small" data-action="sort-za" ${theme ? "" : "disabled"}>Z–A</button>
         </div>
 
+        <div class="bulk-bar" id="word-bulk-bar" ${state.selectedWordIds.size ? "" : "hidden"}>
+          <span class="preview-stat select-stat" id="word-selected-stat">${plural(state.selectedWordIds.size, "Wort", "Wörter")} ausgewählt</span>
+          <span class="spacer"></span>
+          <button type="button" class="btn btn-ghost btn-small" data-action="clear-selection">Auswahl aufheben</button>
+          <button type="button" class="btn btn-small" data-action="move-words">${icon("forward")} In Kapitel verschieben</button>
+          <button type="button" class="btn btn-danger btn-small" data-action="delete-words">${icon("trash")} Auswahl löschen</button>
+        </div>
+
         ${
           words.length
             ? `<div class="table-wrap">
                 <table class="data">
                   <thead>
                     <tr>
+                      <th scope="col" class="select-col">
+                        <label class="row-check">
+                          <input type="checkbox" id="word-select-all" aria-label="Alle sichtbaren Wörter auswählen">
+                          <span class="box"></span>
+                        </label>
+                      </th>
                       <th scope="col">#</th>
                       <th scope="col">Deutsch</th>
                       <th scope="col">Englisch</th>
@@ -373,7 +394,16 @@ export function renderParent(main) {
                         const record = progress.get(word.id);
                         const matches = !query || visible.includes(word);
                         return `
-                        <tr data-search="${esc(`${word.de} ${word.en} ${(word.alternatives || []).join(" ")}`.toLowerCase())}" ${matches ? "" : "hidden"}>
+                        <tr data-word-id="${esc(word.id)}" class="${state.selectedWordIds.has(word.id) ? "is-selected" : ""}"
+                            data-search="${esc(`${word.de} ${word.en} ${(word.alternatives || []).join(" ")}`.toLowerCase())}" ${matches ? "" : "hidden"}>
+                          <td class="select-col">
+                            <label class="row-check">
+                              <input type="checkbox" data-word-select="${esc(word.id)}"
+                                     aria-label="${esc(`${word.de} / ${word.en} auswählen`)}"
+                                     ${state.selectedWordIds.has(word.id) ? "checked" : ""}>
+                              <span class="box"></span>
+                            </label>
+                          </td>
                           <td class="tiny muted">${index + 1}</td>
                           <td>
                             <strong>${sanitizeRichText(word.de)}</strong>
@@ -415,6 +445,7 @@ export function renderParent(main) {
     panel.querySelector("#word-theme")?.addEventListener("change", (event) => {
       state.themeId = event.target.value;
       state.search = "";
+      state.selectedWordIds.clear();
       renderPanel();
     });
 
@@ -424,7 +455,34 @@ export function renderParent(main) {
       panel.querySelectorAll("tbody tr[data-search]").forEach((row) => {
         row.hidden = Boolean(search) && !row.dataset.search.includes(search);
       });
+      updateWordSelectionUi(panel);
     });
+
+    panel.querySelector("#word-select-all")?.addEventListener("change", (event) => {
+      const checked = event.target.checked;
+      panel.querySelectorAll("tbody tr[data-word-id]").forEach((row) => {
+        if (row.hidden) return;
+        if (checked) state.selectedWordIds.add(row.dataset.wordId);
+        else state.selectedWordIds.delete(row.dataset.wordId);
+      });
+      updateWordSelectionUi(panel);
+    });
+
+    panel.querySelectorAll("[data-word-select]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const id = input.dataset.wordSelect;
+        if (input.checked) state.selectedWordIds.add(id);
+        else state.selectedWordIds.delete(id);
+        updateWordSelectionUi(panel);
+      });
+    });
+
+    panel.querySelector('[data-action="clear-selection"]')?.addEventListener("click", () => {
+      state.selectedWordIds.clear();
+      updateWordSelectionUi(panel);
+    });
+    panel.querySelector('[data-action="delete-words"]')?.addEventListener("click", () => deleteSelectedWords());
+    panel.querySelector('[data-action="move-words"]')?.addEventListener("click", () => openMoveWordsModal());
 
     panel.querySelector('[data-action="add-word"]')?.addEventListener("click", () => openWordModal(null));
     panel.querySelector('[data-action="make-list"]')?.addEventListener("click", () => openCustomListModal(theme, visible));
@@ -451,6 +509,45 @@ export function renderParent(main) {
         }
       });
     });
+
+    updateWordSelectionUi(panel);
+  }
+
+  function updateWordSelectionUi(panel = main.querySelector("#parent-panel")) {
+    if (!panel || state.tab !== "words") return;
+    const rows = [...panel.querySelectorAll("tbody tr[data-word-id]")];
+    const visibleRows = rows.filter((row) => !row.hidden);
+    const validIds = new Set(rows.map((row) => row.dataset.wordId));
+    for (const id of [...state.selectedWordIds]) {
+      if (!validIds.has(id)) state.selectedWordIds.delete(id);
+    }
+
+    for (const row of rows) {
+      const input = row.querySelector("[data-word-select]");
+      if (!input) continue;
+      const checked = state.selectedWordIds.has(row.dataset.wordId);
+      if (input.checked !== checked) input.checked = checked;
+      row.classList.toggle("is-selected", checked);
+    }
+
+    const visibleSelected = visibleRows.filter((row) => state.selectedWordIds.has(row.dataset.wordId)).length;
+    const selectAll = panel.querySelector("#word-select-all");
+    if (selectAll) {
+      selectAll.disabled = !visibleRows.length;
+      selectAll.checked = visibleRows.length > 0 && visibleSelected === visibleRows.length;
+      selectAll.indeterminate = visibleSelected > 0 && visibleSelected < visibleRows.length;
+    }
+
+    const count = state.selectedWordIds.size;
+    const bar = panel.querySelector("#word-bulk-bar");
+    if (bar) bar.hidden = count === 0;
+    const stat = panel.querySelector("#word-selected-stat");
+    if (stat) stat.textContent = `${plural(count, "Wort", "Wörter")} ausgewählt`;
+    panel
+      .querySelectorAll('[data-action="clear-selection"], [data-action="move-words"], [data-action="delete-words"]')
+      .forEach((button) => {
+        button.disabled = count === 0;
+      });
   }
 
   async function sortWords(direction) {
@@ -631,6 +728,143 @@ export function renderParent(main) {
     await learner.deleteProgress(word.id);
     showToast("Wort gelöscht.", { iconName: "trash" });
     renderPanel();
+  }
+
+  function getSelectedWords() {
+    if (!state.themeId) return [];
+    return library.getWords(state.themeId).filter((word) => state.selectedWordIds.has(word.id));
+  }
+
+  async function deleteSelectedWords() {
+    const selected = getSelectedWords();
+    if (!selected.length) return;
+    const label = plural(selected.length, "Wort", "Wörter");
+    const ok = await confirmDialog({
+      title: `${label} löschen?`,
+      message: `Die ausgewählten Wörter werden aus dem Thema entfernt. Der Lernfortschritt wird ebenfalls gelöscht.`,
+      confirmLabel: "Löschen",
+      danger: true,
+    });
+    if (!ok) return;
+
+    state.bulkBusy = true;
+    try {
+      for (const word of selected) {
+        await library.deleteWord(word.id);
+        await learner.deleteProgress(word.id);
+      }
+      state.selectedWordIds.clear();
+      showToast(`${label} gelöscht.`, { iconName: "trash" });
+    } catch (error) {
+      showToast(error.message || "Die Wörter konnten nicht gelöscht werden.", { type: "error" });
+    } finally {
+      state.bulkBusy = false;
+      renderPanel();
+    }
+  }
+
+  function openMoveWordsModal() {
+    const selected = getSelectedWords();
+    if (!selected.length) return;
+    const targets = library.getThemes().filter((theme) => theme.id !== state.themeId);
+    if (!targets.length) {
+      showToast("Es gibt noch kein anderes Kapitel, in das du verschieben kannst.", { type: "warn" });
+      return;
+    }
+
+    const label = plural(selected.length, "Wort", "Wörter");
+    const targetOptions = targets
+      .map(
+        (theme) =>
+          `<option value="${esc(theme.id)}">${esc(theme.emoji)} ${esc(theme.name)}</option>`
+      )
+      .join("");
+    const selectedRows = selected
+      .map(
+        (word) =>
+          `<div class="check-row"><span><strong>${esc(word.de)}</strong> <span class="tiny muted">– ${esc(word.en)}</span></span></div>`
+      )
+      .join("");
+
+    openModal({
+      title: `${label} verschieben`,
+      subtitle: "Zielkapitel wählen – der Lernfortschritt kann mitgenommen werden.",
+      size: "modal-lg",
+      content: `
+        <form id="move-words-form" novalidate>
+          <div class="field">
+            <label for="move-target">Ziel-Kapitel / Thema</label>
+            <select class="select" id="move-target" name="targetThemeId" autofocus>${targetOptions}</select>
+          </div>
+          <div class="field">
+            <span class="field-label">Ausgewählte Wörter</span>
+            <div class="check-list" style="max-height:220px;overflow:auto;border:1px solid var(--c-line);border-radius:12px;padding:8px 12px">
+              ${selectedRows}
+            </div>
+          </div>
+          <label class="check-row">
+            <input type="checkbox" id="move-keep-progress" name="keepProgress" checked>
+            <span>Lernfortschritt mitnehmen. Wörter, die im Zielkapitel schon existieren, werden übersprungen.</span>
+          </label>
+        </form>`,
+      actions: [
+        { label: "Abbrechen", variant: "btn-ghost" },
+        {
+          id: "move-submit",
+          label: "Verschieben",
+          variant: "btn-primary",
+          iconName: "forward",
+          onClick: async ({ dialog }) => {
+            const submit = dialog.querySelector("#move-submit");
+            const targetThemeId = dialog.querySelector("#move-target")?.value || "";
+            const targetTheme = library.getTheme(targetThemeId);
+            const keep = dialog.querySelector("#move-keep-progress")?.checked ?? true;
+            if (!targetTheme) {
+              showToast("Bitte wähle ein Zielkapitel.", { type: "warn" });
+              return false;
+            }
+
+            setButtonBusy(submit, true, "Verschiebe …");
+            state.bulkBusy = true;
+            let moved = 0;
+            let skipped = 0;
+            try {
+              for (const word of selected) {
+                const oldId = word.id;
+                try {
+                  const result = await library.updateWord(
+                    oldId,
+                    { themeId: targetThemeId },
+                    { keepProgress: keep }
+                  );
+                  if (result.changed) {
+                    if (keep) await learner.migrateProgress(result.oldId, result.newId);
+                    else await learner.deleteProgress(result.oldId);
+                  }
+                  moved++;
+                } catch (error) {
+                  skipped++;
+                }
+              }
+              state.selectedWordIds.clear();
+              const skippedText = skipped ? ` · ${plural(skipped, "Wort", "Wörter")} übersprungen` : "";
+              showToast(
+                `${plural(moved, "Wort", "Wörter")} nach „${targetTheme.name}“ verschoben${skippedText}.`,
+                { type: skipped && !moved ? "warn" : "success", iconName: "forward" }
+              );
+              return true;
+            } catch (error) {
+              showToast(error.message || "Die Wörter konnten nicht verschoben werden.", { type: "error" });
+              return false;
+            } finally {
+              state.bulkBusy = false;
+              setButtonBusy(submit, false);
+              renderPanel();
+            }
+          },
+        },
+      ],
+    });
   }
 
   /* ---------- Themen ---------- */
@@ -3037,7 +3271,7 @@ export function renderParent(main) {
   // Bei Änderungen von außen (z. B. Fortschritt) nur die Ansicht aktualisieren,
   // wenn das Panel sichtbar ist. So bleiben offene Modale unberührt.
   const offLibrary = bus.on("library:change", () => {
-    if (alive && state.unlocked && !document.querySelector(".modal-backdrop")) {
+    if (alive && state.unlocked && !state.bulkBusy && !document.querySelector(".modal-backdrop")) {
       renderPanel();
     }
   });

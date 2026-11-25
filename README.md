@@ -301,7 +301,7 @@ Der Elternbereich ist über eine zweistellige Multiplikationsaufgabe geschützt.
 
 | Tab | Aufgaben |
 |---|---|
-| **Wörter** | Thema wählen, suchen, Wörter anlegen/bearbeiten/löschen, nach oben/unten verschieben, A–Z oder Z–A sortieren. |
+| **Wörter** | Thema wählen, suchen, Wörter anlegen/bearbeiten/löschen, nach oben/unten verschieben, A–Z oder Z–A sortieren. Mehrere Wörter per Checkbox auswählen, gemeinsam löschen oder in ein anderes Kapitel/Thema verschieben (Lernfortschritt bleibt optional erhalten). |
 | **Themen** | Themen anlegen/bearbeiten/löschen, Reihenfolge ändern, Punkte-Sperre setzen, A–Z sortieren, CSV exportieren. |
 | **Import** | CSV aus Datei, Einfügen oder URL; **Foto-Import** mit Vorschlägen und Auswahl; Vorschau; Zielthema oder neues Thema; Importmodus. |
 | **Sichern** | Lokales JSON-Backup aller Profile als Alternative zu Google Drive erstellen/wiederherstellen, CSV pro Thema exportieren, leere Vorlage laden, Standardlisten wiederherstellen, Fortschritt oder alle Daten löschen. |
