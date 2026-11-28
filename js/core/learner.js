@@ -75,6 +75,9 @@ const DEFAULT_PROFILE = {
   mixSessions: 0,
   streak: { count: 0, best: 0, lastDay: null },
   daily: { date: null, points: 0, words: 0, rewarded: false },
+  // Aktive Übungszeit je Kalendertag (Schlüssel: JJJJ-MM-TT, Wert: ms).
+  // Liegt im Profil, damit sie auch nach dem Löschen des Rundenverlaufs bleibt.
+  practiceTime: {},
   badges: [],
   milestones: [],
   createdAt: null,
@@ -125,6 +128,18 @@ function normalizeProfile(raw) {
   merged.writeCorrect = Math.max(0, Number(merged.writeCorrect) || 0);
   merged.mixSessions = Math.max(0, Number(merged.mixSessions) || 0);
   merged.daily.rewarded = Boolean(merged.daily.rewarded);
+
+  const practiceTime = {};
+  const rawPracticeTime = merged.practiceTime && typeof merged.practiceTime === "object" ? merged.practiceTime : {};
+  for (const [day, value] of Object.entries(rawPracticeTime)) {
+    const ms = Number(value);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(day) && Number.isFinite(ms) && ms > 0) {
+      practiceTime[day] = Math.round(ms);
+    }
+  }
+  merged.practiceTime = Object.fromEntries(
+    Object.entries(practiceTime).sort(([a], [b]) => a.localeCompare(b)).slice(-90)
+  );
   // Alte Profile, die das Tagesziel heute schon erreicht haben, feiern nicht erneut.
   if (merged.daily.date === localDayKey() && merged.daily.points >= DAILY_GOAL_POINTS) {
     merged.daily.rewarded = true;
@@ -702,6 +717,9 @@ export async function finishSession(summary) {
   profile.daily.points += pointsEarned;
   profile.daily.words += summary.totalWords || 0;
 
+  const activeMs = Math.max(0, Math.round(summary.activeMs ?? summary.durationMs ?? 0));
+  profile.practiceTime[today] = (profile.practiceTime[today] || 0) + activeMs;
+
   const dailyGoalReached = !dailyWasRewarded && profile.daily.points >= DAILY_GOAL_POINTS;
   if (dailyGoalReached) profile.daily.rewarded = true;
 
@@ -719,6 +737,7 @@ export async function finishSession(summary) {
     firstTryCorrect: summary.firstTryCorrect || 0,
     attempts: summary.attempts || 0,
     durationMs: summary.durationMs || 0,
+    activeMs,
   };
   sessions.unshift({ ...sessionRecord, id: `local-${Date.now()}` });
   sessions = sessions.slice(0, 100);
@@ -748,6 +767,84 @@ export async function getSessions() {
 export async function reloadSessions() {
   sessions = await db.sessionsAll();
   return [...sessions];
+}
+
+/** Aktiv geübte Zeit auch für abgebrochene Runden festhalten. */
+export async function recordPracticeTime(ms) {
+  const amount = Math.max(0, Math.round(Number(ms) || 0));
+  if (!amount || !profile) return;
+  const today = localDayKey();
+  profile.practiceTime[today] = (profile.practiceTime[today] || 0) + amount;
+  await persistProfile();
+}
+
+/**
+ * Übungszeit pro Kalendertag für die letzten `days` Tage.
+ * Die Zeit liegt im Profil und bleibt damit auch nach dem Löschen des
+ * Rundenverlaufs erhalten. Alte Runden ohne `activeMs` werden einmalig
+ * aus der früheren Rundendauer übernommen.
+ */
+export function getPracticeDays(days = 14) {
+  const count = Math.max(1, Math.min(60, Number(days) || 14));
+  const tracked = profile?.practiceTime || {};
+  const byDay = new Map();
+
+  for (const session of sessions) {
+    const at = Number(session?.at) || 0;
+    if (!at) continue;
+    const key = localDayKey(new Date(at));
+    const entry = byDay.get(key) || {
+      date: key,
+      sessionMs: 0,
+      legacyMs: 0,
+      sessions: 0,
+      points: 0,
+      words: 0,
+    };
+    const hasTrackedTime = Object.prototype.hasOwnProperty.call(tracked, key);
+    const isLegacy = session.activeMs === undefined || session.activeMs === null;
+    const durationMs = Math.max(0, Number(isLegacy ? session.durationMs : session.activeMs) || 0);
+    // Nur addieren, wenn für diesen Tag noch kein Profilwert vorliegt,
+    // sonst würde dieselbe Runde doppelt gezählt.
+    if (!hasTrackedTime) entry.sessionMs += durationMs;
+    else if (isLegacy) entry.legacyMs += durationMs;
+    entry.sessions += 1;
+    entry.points += Math.max(0, Number(session.points) || 0);
+    entry.words += Math.max(0, Number(session.totalWords) || 0);
+    byDay.set(key, entry);
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const result = [];
+  for (let offset = count - 1; offset >= 0; offset--) {
+    const day = new Date(today);
+    day.setDate(day.getDate() - offset);
+    const key = localDayKey(day);
+    const entry = byDay.get(key) || { date: key, sessionMs: 0, legacyMs: 0, sessions: 0, points: 0, words: 0 };
+    const trackedMs = Math.max(0, Number(tracked[key]) || 0);
+    result.push({
+      date: key,
+      durationMs: trackedMs + entry.sessionMs + entry.legacyMs,
+      sessions: entry.sessions,
+      points: entry.points,
+      words: entry.words,
+      label: day.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" }),
+      fullLabel: day.toLocaleDateString("de-DE", {
+        weekday: "long",
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      }),
+      isToday: offset === 0,
+    });
+  }
+  return result;
+}
+
+/** Gesamte aktiv geübte Zeit des aktuellen Profils. */
+export function getPracticeTotal() {
+  return Object.values(profile?.practiceTime || {}).reduce((sum, value) => sum + Math.max(0, Number(value) || 0), 0);
 }
 
 /** Für den Elternbereich: Wortstatistik sortiert nach Fehlern. */

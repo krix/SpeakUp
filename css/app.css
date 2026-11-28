@@ -797,6 +797,20 @@ main:focus:not(:focus-visible) { outline: none; }
 .box-bar > span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--c-primary), var(--c-blue)); transition: width .4s ease; }
 .box-row:nth-child(5) .box-bar > span { background: linear-gradient(90deg, var(--c-green), var(--c-mint)); }
 
+/* Tägliche Übungszeit */
+.practice-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+.practice-summary > div { padding: 10px 12px; border-radius: var(--r-md); background: var(--c-surface-2); border: 1px solid var(--c-line); }
+.practice-summary strong { display: block; font-size: 1.15rem; }
+.practice-summary span { font-size: .76rem; font-weight: 800; color: var(--c-muted); }
+.practice-chart { display: flex; flex-direction: column; gap: 6px; }
+.practice-day { display: grid; grid-template-columns: 44px 1fr 82px; gap: 10px; align-items: center; }
+.practice-date { font-size: .78rem; font-weight: 800; color: var(--c-muted); }
+.practice-day.is-today .practice-date { color: var(--c-primary); }
+.practice-bar { height: 10px; border-radius: var(--r-pill); background: #EFEAE2; overflow: hidden; }
+.practice-bar > span { display: block; height: 100%; min-width: 0; border-radius: inherit; background: linear-gradient(90deg, var(--c-primary), var(--c-blue)); transition: width .4s ease; }
+.practice-day.is-today .practice-bar > span { background: linear-gradient(90deg, var(--c-green), var(--c-mint)); }
+.practice-time { font-size: .78rem; font-weight: 800; color: var(--c-muted); text-align: right; white-space: nowrap; }
+
 /* Rundenverlauf */
 .history-list { display: flex; flex-direction: column; gap: 8px; }
 .history-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--r-md); background: #fff; border: 1px solid var(--c-line); }
@@ -1398,11 +1412,12 @@ table.preview .select-col { width: 56px; text-align: center; }
   }
   main:has(.progress-hero) > .stack-lg > :nth-child(1) { grid-area: 1 / 1 / 2 / -1; }
   main:has(.progress-hero) > .stack-lg > :nth-child(2) { grid-area: 2 / 1 / 3 / -1; }
-  main:has(.progress-hero) > .stack-lg > :nth-child(3) { grid-area: 3 / 1; }
+  main:has(.progress-hero) > .stack-lg > :nth-child(3) { grid-area: 3 / 1 / 4 / -1; }
   main:has(.progress-hero) > .stack-lg > :nth-child(4) { grid-area: 4 / 1; }
-  main:has(.progress-hero) > .stack-lg > :nth-child(5) { grid-area: 3 / 2; }
-  main:has(.progress-hero) > .stack-lg > :nth-child(6) { grid-area: 3 / 3 / 5 / 4; }
-  main:has(.progress-hero) > .stack-lg > :nth-child(7) { grid-area: 4 / 2; }
+  main:has(.progress-hero) > .stack-lg > :nth-child(5) { grid-area: 5 / 1; }
+  main:has(.progress-hero) > .stack-lg > :nth-child(6) { grid-area: 4 / 2; }
+  main:has(.progress-hero) > .stack-lg > :nth-child(7) { grid-area: 4 / 3 / 6 / 4; }
+  main:has(.progress-hero) > .stack-lg > :nth-child(8) { grid-area: 5 / 2; }
   main:has(.progress-hero) .section-head p { font-size: .68rem; line-height: 1.3; }
   .progress-hero { padding: 8px 10px; gap: 6px; border-radius: 18px; }
   .level-line { gap: 8px; }
@@ -1439,7 +1454,12 @@ table.preview .select-col { width: 56px; text-align: center; }
   .box-label { font-size: .68rem; white-space: nowrap; }
   .box-chip { width: 18px; height: 18px; font-size: .66rem; }
   .box-bar { height: 6px; }
-  main:has(.progress-hero) > .stack-lg > section:nth-child(4) .panel > p { font-size: .68rem; line-height: 1.3; }
+  .practice-summary { margin-bottom: 6px; }
+  .practice-chart { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 16px; gap: 4px; }
+  .practice-day { grid-template-columns: 36px 1fr 64px; gap: 4px; }
+  .practice-date, .practice-time { font-size: .66rem; }
+  .practice-bar { height: 6px; }
+  main:has(.progress-hero) > .stack-lg > section:nth-child(5) .panel > p { font-size: .68rem; line-height: 1.3; }
 
   /* Elternbereich: Panels nebeneinander, lange Tabellen intern begrenzt */
   .parent-tabs { margin-bottom: 8px; padding: 2px 0 6px; gap: 6px; }

@@ -107,6 +107,17 @@ export function formatDuration(ms) {
   return `${minutes} Min. ${seconds} Sek.`;
 }
 
+/** Kompakte Dauer für Diagramme und Statistikkarten. */
+export function formatDurationShort(ms) {
+  const seconds = Math.round(Math.max(0, Number(ms) || 0) / 1000);
+  if (seconds < 60) return `${seconds} Sek.`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} Min.`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${hours} Std. ${rest} Min.` : `${hours} Std.`;
+}
+
 export function debounce(fn, delay = 250) {
   let timer;
   return (...args) => {

@@ -30,6 +30,7 @@ import {
   showToast,
   formatDate,
   formatDuration,
+  formatDurationShort,
   plural,
   readTextFile,
   setButtonBusy,
@@ -40,6 +41,7 @@ import {
 import { sfx, setSfxEnabled } from "../ui/sfx.js";
 import { speak, unlockTts } from "../core/tts.js";
 import { mascot } from "../ui/mascot.js";
+import { practiceSummaryMarkup, practiceChartMarkup } from "../ui/practice.js";
 import { showConsentModal } from "./onboarding.js";
 import { openProfileSwitcher, openProfileForm } from "../ui/profile-switcher.js";
 import { canInstall, promptInstall, installHint, isStandalone } from "../core/install.js";
@@ -2156,6 +2158,9 @@ export function renderParent(main) {
     const started = rows.filter((row) => row.seen > 0).length;
     const mastered = [...progress.values()].filter((record) => learner.isMastered(record)).length;
     const seenTotal = Object.values(boxes).reduce((sum, value) => sum + value, 0);
+    const practiceDays = learner.getPracticeDays(14);
+    const activeProfile = profiles.isReady() ? profiles.getActiveProfile() : null;
+    const profileLabel = activeProfile ? `${activeProfile.emoji} ${activeProfile.name}` : "aktuelles Profil";
 
     panel.innerHTML = `
       <div class="stack">
@@ -2224,6 +2229,17 @@ export function renderParent(main) {
                 <p class="scroll-hint">Quote = richtige Antworten geteilt durch alle Versuche.</p>`
               : `<div class="table-empty">Keine Wörter gefunden.</div>`
           }
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Übungszeit pro Tag</h2>
+              <p>${esc(profileLabel)} · letzte 14 Tage · insgesamt ${esc(formatDurationShort(learner.getPracticeTotal()))} · Pausen zählen nicht</p>
+            </div>
+          </div>
+          ${practiceSummaryMarkup(practiceDays)}
+          ${practiceChartMarkup(practiceDays)}
         </div>
 
         <div class="panel">

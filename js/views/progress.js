@@ -4,9 +4,10 @@
  */
 import * as library from "../core/library.js";
 import * as learner from "../core/learner.js";
-import { icon, esc, formatDate, plural, showToast, sanitizeRichText, stripRichText } from "../ui/dom.js";
+import { icon, esc, formatDate, formatDurationShort, plural, showToast, sanitizeRichText, stripRichText } from "../ui/dom.js";
 import { mascot } from "../ui/mascot.js";
 import { themeMedal } from "../ui/medal.js";
+import { practiceSummaryMarkup, practiceChartMarkup } from "../ui/practice.js";
 import { speak, unlockTts } from "../core/tts.js";
 import { startSession } from "./session.js";
 
@@ -37,6 +38,8 @@ export function renderProgress(main) {
   const boxes = learner.getBoxCounts();
   const streak = learner.getDisplayStreak();
   const daily = learner.getDailyGoal(learner.DAILY_GOAL_POINTS);
+  const practiceDays = learner.getPracticeDays(14);
+  const practiceTotal = learner.getPracticeTotal();
   const badges = learner.getBadgeStates();
   const earnedBadges = badges.filter((badge) => badge.earned);
   const milestones = learner.getMilestoneStates();
@@ -190,6 +193,17 @@ export function renderProgress(main) {
             </div>`
             )
             .join("")}
+        </div>
+      </section>
+
+      <section aria-labelledby="practice-title">
+        <div class="section-head">
+          <h2 id="practice-title">Übungszeit</h2>
+          <p>Aktive Zeit deines Profils in den letzten 14 Tagen · insgesamt ${esc(formatDurationShort(practiceTotal))} · Pausen zählen nicht.</p>
+        </div>
+        <div class="panel">
+          ${practiceSummaryMarkup(practiceDays)}
+          ${practiceChartMarkup(practiceDays)}
         </div>
       </section>
 

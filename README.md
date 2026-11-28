@@ -65,7 +65,7 @@ Sprechen, hören, mit dem Stift schreiben oder tippen: SpeakUp kombiniert vier L
 - CSV-Import aus Datei, Zwischenablage oder URL – mit Vorschau, Validierung und den Modi **Hinzufügen**, **Zusammenführen** und **Ersetzen**.
 - **Foto-Import:** Vokabelliste fotografieren, erkannte Paare prüfen, einzelne Zeilen abwählen und importieren.
 - CSV-Export pro Thema, JSON-Backup und Wiederherstellung.
-- Statistik pro Wort, Leitner-Boxen, Rundenverlauf, Fortschritt zurücksetzen.
+- Statistik pro Wort, Leitner-Boxen, Rundenverlauf und aktiv geübte Zeit pro Tag und Profil, Fortschritt zurücksetzen.
 - Standardlisten wiederherstellen, ohne eigene Wörter oder Fortschritte zu verlieren, solange die Wort-IDs gleich bleiben.
 
 ### Technik
@@ -149,6 +149,7 @@ SpeakUp/
 │  │  ├─ confetti.js       Konfetti mit Reduced-Motion-Schutz
 │  │  ├─ dom.js            DOM-Helfer, Toasts, Modale
 │  │  ├─ mascot.js         Maskottchen „Pip“
+│  │  ├─ practice.js        Balken und Kennzahlen zur Übungszeit
 │  │  ├─ profile-switcher.js  Profil-Dialog und -Formulare
 │  │  └─ sfx.js            WebAudio-Toneffekte
 │  └─ views/
@@ -305,8 +306,10 @@ Der Elternbereich ist über eine zweistellige Multiplikationsaufgabe geschützt.
 | **Themen** | Themen anlegen/bearbeiten/löschen, Reihenfolge ändern, Punkte-Sperre setzen, A–Z sortieren, CSV exportieren. |
 | **Import** | CSV aus Datei, Einfügen oder URL; **Foto-Import** mit Vorschlägen und Auswahl; Vorschau; Zielthema oder neues Thema; Importmodus. |
 | **Sichern** | Lokales JSON-Backup aller Profile als Alternative zu Google Drive erstellen/wiederherstellen, CSV pro Thema exportieren, leere Vorlage laden, Standardlisten wiederherstellen, Fortschritt oder alle Daten löschen. |
-| **Fortschritt** | Statistik pro Wort, Sortierung nach Fehlern/Box/Quote, Box-Verteilung, Rundenverlauf, Fortschritt einzelner Wörter löschen. |
+| **Fortschritt** | Statistik pro Wort, Sortierung nach Fehlern/Box/Quote, Box-Verteilung, aktive Übungszeit des Profils pro Tag (14 Tage), Rundenverlauf, Fortschritt einzelner Wörter löschen. |
 | **Einstellungen** | Benutzerprofile anlegen/umbenennen/löschen, Google-Drive-Client-ID und manuelle Synchronisierung, Toneffekte, automatisches Vorlesen, Handschrift- und Spracheingabe-Anbieter inkl. Gemini-API-Schlüssel/Modelle, Vorlese-Geschwindigkeit, Online-Einwilligung, Installation, Speicherbelegung. |
+
+Die **aktive Übungszeit** zählt nur, solange das Fenster sichtbar und fokussiert ist – Pausen durch einen anderen Tab oder ein anderes Fenster zählen nicht. Abgebrochene Runden fließen mit ihrer aktiven Zeit ein, zählen aber nicht als abgeschlossene Runde. Die Tageswerte liegen im jeweiligen Profil und bleiben auch nach dem Löschen des Rundenverlaufs erhalten.
 
 Die Entsperrung gilt für die aktuelle Browser-Sitzung (`sessionStorage`). Beim Schließen des Tabs wird sie zurückgesetzt.
 
@@ -368,7 +371,7 @@ Daraus folgen die Regeln:
 **Elternbereich → Sichern → Lokales Backup (ohne Google Drive) → Backup-Datei herunterladen** erzeugt `speakup-backup.json`. Die Datei ist die lokale Alternative zur Cloud-Sicherung: kein Konto, kein Internet, keine Google-API. Sie enthält:
 
 - Bibliothek (alle Themen und Vokabellisten, eigene Wörter, Tombstones, Datenversion),
-- Profil (Punkte, Level-Grundlage, Abzeichen, Serie),
+- Profil (Punkte, Level-Grundlage, Abzeichen, Serie, aktive Übungszeit je Tag),
 - Einstellungen,
 - Fortschritt pro Wort,
 - Rundenverlauf,
@@ -552,7 +555,7 @@ Ideen für eine spätere Version:
 - **Lehrer-Dashboard** mit einer Übersicht über mehrere Profile auf einem Gerät.
 - **Export als Arbeitsblatt** (PDF) mit den Wörtern eines Themas.
 - **Weitere Sprachen** als Lernziel (z. B. Französisch), mit austauschbarem Sprachpaket.
-- **Subtile Lernstatistik** für Eltern: Zeit pro Tag, häufigste Fehlerarten, Fortschritt über Wochen.
+- **Subtile Lernstatistik** für Eltern: häufigste Fehlerarten, Fortschritt über Wochen.
 - **Ende-zu-Ende-Verschlüsselung** für die Google-Drive-Datei, damit auch der Anbieter die Vokabellisten nicht lesen kann.
 - **Automatisierte Tests** für Antwortprüfung, CSV-Parser, Import-Modi und Fortschrittsmigration.
 - **Vollständiger Accessibility-Audit** mit Screenreader- und Kontrastprüfung.

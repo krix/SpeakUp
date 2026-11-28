@@ -266,6 +266,9 @@ function runRound(main, config, onRestart) {
     wrongByWord: new Map(),
     firstPassDone: new Set(),
     startedAt: Date.now(),
+    activeMs: 0,
+    activeSince: document.hidden ? null : Date.now(),
+    finished: false,
     modeCounter: 0,
     current: null,
     recognizer: null,
@@ -290,6 +293,30 @@ function runRound(main, config, onRestart) {
 
   const stage = main.querySelector("#session-stage");
 
+  /* --- Aktive Übungszeit (ohne Pausen bei ausgeblendetem Fenster) --- */
+  function pauseActiveTimer() {
+    if (state.activeSince === null) return;
+    state.activeMs += Math.max(0, Date.now() - state.activeSince);
+    state.activeSince = null;
+  }
+
+  function resumeActiveTimer() {
+    if (state.activeSince === null && !document.hidden) state.activeSince = Date.now();
+  }
+
+  function currentActiveMs() {
+    return state.activeMs + (state.activeSince === null ? 0 : Math.max(0, Date.now() - state.activeSince));
+  }
+
+  function onVisibilityChange() {
+    if (document.hidden) pauseActiveTimer();
+    else resumeActiveTimer();
+  }
+
+  document.addEventListener("visibilitychange", onVisibilityChange);
+  window.addEventListener("blur", pauseActiveTimer);
+  window.addEventListener("focus", resumeActiveTimer);
+
   /* --- Aufräumen pro Frage (Pad, Erkennung, Timer) --- */
   function cleanupQuestion() {
     clearTimeout(state.timer);
@@ -302,8 +329,17 @@ function runRound(main, config, onRestart) {
   }
 
   function cleanup() {
+    if (!state.alive) return;
     state.alive = false;
+    pauseActiveTimer();
+    document.removeEventListener("visibilitychange", onVisibilityChange);
+    window.removeEventListener("blur", pauseActiveTimer);
+    window.removeEventListener("focus", resumeActiveTimer);
     cleanupQuestion();
+    // Abgebrochene Runden zählen zur aktiven Übungszeit, aber nicht als Runde.
+    if (!state.finished && state.activeMs >= 5000) {
+      void learner.recordPracticeTime(state.activeMs);
+    }
   }
 
   /* --- Fortschritt in der Kopfzeile --- */
@@ -1379,11 +1415,14 @@ function runRound(main, config, onRestart) {
   /* --- Ergebnisse ---------- */
   function showResults() {
     cleanupQuestion();
+    pauseActiveTimer();
     const total = state.total;
     const ratio = total ? state.firstTryCorrect / total : 0;
     const stars = ratio >= 0.9 ? 3 : ratio >= 0.7 ? 2 : 1;
     const perfect = state.wrongByWord.size === 0;
+    state.finished = true;
     const durationMs = Date.now() - state.startedAt;
+    const activeMs = currentActiveMs();
     const missedWords = initialWords.filter((word) => state.wrongByWord.has(word.id));
     const wheelReward = pickWheelReward();
     const totalPoints = state.points + wheelReward.points;
@@ -1406,6 +1445,7 @@ function runRound(main, config, onRestart) {
       totalWords: total,
       firstTryCorrect: state.firstTryCorrect,
       durationMs,
+      activeMs,
       bonusPoints: wheelReward.points,
       wheelReward: {
         id: wheelReward.id,
@@ -1429,7 +1469,7 @@ function runRound(main, config, onRestart) {
         <div class="result-stats">
           <div class="result-stat"><strong>${state.firstTryCorrect} / ${total}</strong><span>beim ersten Versuch</span></div>
           <div class="result-stat"><strong>${state.maxStreak}</strong><span>beste Serie</span></div>
-          <div class="result-stat"><strong>${Math.round((durationMs / 60000) * 10) / 10 || "0"}</strong><span>Minuten</span></div>
+          <div class="result-stat"><strong>${Math.round((activeMs / 60000) * 10) / 10 || "0"}</strong><span>aktive Minuten</span></div>
         </div>
         ${missedWords.length ? `
           <div class="result-words">
